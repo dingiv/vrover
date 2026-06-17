@@ -1,0 +1,45 @@
+{
+  "name": "visual-rover",
+  "version": "0.1.0",
+  "description": "VRover — a visual GUI agent with Set-of-Mark grounding. Desktop + browser targets behind a unified Platform abstraction, pluggable LLM.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx examples/mock-run.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc"
+  },
+  "keywords": [
+    "gui-agent",
+    "automation",
+    "set-of-mark",
+    "computer-use",
+    "vision"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "^11.2.2",
+      "onFail": "download"
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
+    "@napi-rs/canvas": "^1.0.0",
+    "dotenv": "^17.4.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}
