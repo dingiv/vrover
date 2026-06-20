@@ -1,9 +1,13 @@
 # @vrover/visual-scout-devtools
 
-The **browser DevTools UI** for the Visual Scout server. A self-contained web page that drives
-scout's in-process **devtools service** (HTTP/SSE) — inspect sessions, render the screenshot with a
-Set-of-Mark overlay, drive actions, and configure server state. Browsers can't speak scout's raw TCP
-protocol, so the scout process bridges: **browser ⇄ HTTP/SSE ⇄ scout devtools service ⇄ Session.dispatch**.
+The **browser DevTools UI** for the Visual Scout server — a **Vue 3 + Vite client-rendered SPA**
+(no SSR). It drives scout's in-process **devtools service** (HTTP/SSE): inspect sessions, render the
+screenshot with a Set-of-Mark overlay, drive actions, and configure server state. Browsers can't
+speak scout's raw TCP protocol, so the scout process bridges:
+**browser ⇄ HTTP/SSE ⇄ scout devtools service ⇄ `Session.dispatch`**.
+
+The SPA calls only relative `/api/...` URLs; in dev (`vite`) and preview (`vite preview`) Vite
+**proxies `/api`** to the scout devtools port — single origin, no CORS, SSE streams cleanly.
 
 ## Run
 
@@ -11,21 +15,25 @@ protocol, so the scout process bridges: **browser ⇄ HTTP/SSE ⇄ scout devtool
 # 1. start scout with the devtools service on an extra port
 pnpm scout:app -- --devtools-port 7881
 
-# 2. serve the devtools UI
-pnpm devtools                                              # http://127.0.0.1:9090  →  api 127.0.0.1:7881
-pnpm devtools -- --api http://127.0.0.1:7881 --port 9090
+# 2. run the UI (Vite dev server, HMR) — open the printed http://localhost:9090
+pnpm devtools
+
+# point at a non-default scout devtools port:
+SCOUT_DEVTOOLS_API=http://127.0.0.1:7881 pnpm devtools
 ```
 
-Open the printed URL. No API key is needed — the devtools drives scout backends directly.
+No API key is needed — the devtools drives scout backends directly.
 
-### Options
+### Scripts
 
-| Flag | Default | Notes |
-|---|---|---|
-| `--api <url>` | `$SCOUT_DEVTOOLS_API` or `http://127.0.0.1:7881` | Scout devtools API URL |
-| `--host <host>` | `127.0.0.1` | UI bind host |
-| `--port <port>` | `9090` | UI bind port (`0` = OS-assigned) |
-| `-h, --help` | | Show usage |
+| Script | What it does |
+|---|---|
+| `pnpm devtools` | Vite dev server (HMR) on :9090, proxy `/api` → scout devtools. |
+| `pnpm devtools:build` | `vue-tsc --noEmit && vite build` → `dist/` (type-check + production bundle). |
+| `pnpm devtools:preview` | Serve the built `dist/` (`vite preview`), same `/api` proxy. |
+
+> This app is **excluded** from the repo's `tsc` typecheck/build graph (it needs DOM lib + bundler
+> resolution). Type-check it with `vue-tsc` and build it with `vite` — both via the scripts above.
 
 ### What the UI does
 
@@ -35,9 +43,24 @@ Open the printed URL. No API key is needed — the devtools drives scout backend
 - **Live** — an `EventSource` on `/api/sessions/:id/stream` streams frames in real time.
 - **Config** — GET/PUT `/api/config` (SSE capture interval, active session) — the "configure server state" surface.
 
+### Layout
+
+```
+index.html               Vite entry
+vite.config.ts           Vue plugin + server/preview proxy (SCOUT_DEVTOOLS_API)
+src/
+  main.ts                createApp(App).mount('#app')
+  App.vue                3-column layout; provides the devtools store
+  api.ts                 typed fetch + EventSource client (relative /api)
+  types.ts               UiElement / SessionInfo / DevtoolsConfig / Frame
+  composables/useDevtools.ts   reactive store (sessions, capture, live, config)
+  components/{SessionPanel,Viewport,ActionBar,ConfigPanel}.vue
+  style.css
+```
+
 ### Scout devtools HTTP/SSE API (`/api`)
 
 `GET /api/health` · `GET|POST /api/sessions` · `DELETE /api/sessions/:id` ·
 `GET /api/sessions/:id/capture` (image/png) · `GET /api/sessions/:id/elements` ·
 `POST /api/sessions/:id/{click|type|scroll|keypress}` · `GET /api/sessions/:id/stream` (SSE) ·
-`GET|PUT /api/config`. Permissive CORS is enabled so a browser at another origin can call it.
+`GET|PUT /api/config`. The service lives in `packages/scout` (`devtools.ts`); CORS is enabled too.

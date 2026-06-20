@@ -1,9 +1,14 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "composite": true,
-    "outDir": "dist",
-    "rootDir": "src"
+    "noEmit": true,
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "useDefineForClassFields": true,
+    "isolatedModules": true
   },
-  "include": ["src"]
+  "include": ["src", "vite.config.ts", "env.d.ts"],
+  "exclude": ["dist", "node_modules"]
 }

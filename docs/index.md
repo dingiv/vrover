@@ -45,7 +45,7 @@ pnpm scout:app                # 起独立 Visual Scout server 应用（CLI：--h
 pnpm rover:app                # 起独立 VRover GUI agent server（serve：web UI + HTTP agent 服务；跑任务需 key）
 pnpm rover:app -- --mode cli --task "..."   # CLI 模式一次性跑一个任务
 pnpm scout:app -- --devtools-port 7881       # scout 同时暴露浏览器 devtools 服务（HTTP/SSE，复用 session）
-pnpm devtools                                 # 起 Scout DevTools web UI（浏览器打开，驱动 devtools 服务）
+pnpm devtools                                 # 起 Scout DevTools web UI（Vue3/Vite 客户端渲染；Vite 代理 /api → scout）
 ```
 
 ## 目录
@@ -65,7 +65,7 @@ packages/
 apps/         独立应用实例（workspace 包，各自 CLI 启动）
   visual_scout/   独立 Visual Scout server（CLI 启动；对外暴露 UI 操作服务；--devtools-port 开 HTTP/SSE devtools 服务）
   visual_rover/   独立 VRover GUI agent server（CLI 启动；cli 前端 + web 前端，对外暴露 agent 服务）
-  visual_scout_devtools/  Scout 浏览器 DevTools UI（HTTP/SSE 驱动 scout devtools 服务）
+  visual_scout_devtools/  Scout 浏览器 DevTools UI（Vue3/Vite 客户端渲染；经 /api 代理驱动 scout devtools 服务）
 examples/     mock-run.ts / scout-server.ts / scout-run.ts / scout-client.ts
 test/         vitest
 ```

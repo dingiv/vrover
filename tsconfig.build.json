@@ -10,7 +10,6 @@
     { "path": "packages/scout" },
     { "path": "packages/agent" },
     { "path": "apps/visual_scout" },
-    { "path": "apps/visual_rover" },
-    { "path": "apps/visual_scout_devtools" }
+    { "path": "apps/visual_rover" }
   ]
 }
