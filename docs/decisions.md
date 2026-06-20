@@ -70,10 +70,10 @@
 **选项**：(a) 先纯结构相对，语义标签作 DSL 里可选层后加；(b) 一步到位语义标签。
 **倾向**：(a)——先结构相对跑通 walker，语义标签后置。
 
-## 🟡 D4 — Visual Scout 进程位置（walker 已定在 Tool 内）
-**现状**：D10 已定 walker 是 Visual Scout 的 per-connection 组件（不在大脑侧）。剩下只是 Visual Scout 自己 in-process 还是独立 server。
-**选项**：(a) 先 in-process 跑通；(b) 一开始就 server 化。
-**倾向**：(a) in-process 优先（M1），server 化留到 M3。
+## ✅ D4 — Visual Scout 进程位置（已定：独立 TCP server + 会话）
+**结论**：Visual Scout 是**独立 TCP server**，说一种**自定义二进制协议**（12 字节帧头 `[magic][ver][type][id u32][len u32]` + JSON/binary payload）。客户端先发 `HAND_SHAKE` 握手，server 据此为每条连接铸造一个 **session**（含独立 `Platform` 操作终端＝截屏器＋键鼠 + walker 占位）；server 级持有共享 `GraphMap` 占位。对应 D10 的「N 连接 ⇒ N session ⇒ 共享 1 份 graph map」。walker 仍 per-session（在 Scout 内，非大脑侧）。
+**演进**：从早期「in-process 优先（M1）、server 化留到 M3」直接跨到 server 形态——多会话模型本身要求 server。`Walker` / `GraphMap` 为**空占位**，逻辑等 D1/D2 定稿。
+**状态**：✅ server 形态已定（TCP + 自定义协议 + 握手建会话）；🟡 walker / graph-map 内部随 D1/D2 细化。详见 [scout-server.md](./scout-server.md)。
 
 ## 🟡 D5 — 参数化节点（`open_article(id)` 的 id→项映射）
 **现状**：`open_article(id)` 意味着"文章列表"是结构固定、内容可变的节点。要把 id 映射到具体项，DSL 必须支持参数化节点，否则退到"点第 N 项"。

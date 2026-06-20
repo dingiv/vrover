@@ -6,6 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx examples/mock-run.ts",
+    "scout": "tsx examples/scout-server.ts",
+    "scout:run": "tsx examples/scout-run.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -7,6 +7,9 @@ export interface Config {
   effort: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   maxTokens: number;
   maxSteps: number;
+  /** Where the Visual Scout server listens (brain/client side reads this). */
+  scoutHost: string;
+  scoutPort: number;
 }
 
 function required(name: string): string {
@@ -40,6 +43,8 @@ export function loadConfig(): Config {
     effort: isEffort(effortEnv) ? effortEnv : 'medium',
     maxTokens: Number(process.env.ANTHROPIC_MAX_TOKENS ?? 16000),
     maxSteps: Number(process.env.MAX_STEPS ?? 15),
+    scoutHost: process.env.SCOUT_HOST ?? '127.0.0.1',
+    scoutPort: Number(process.env.SCOUT_PORT ?? 7878),
   };
   return cached;
 }
