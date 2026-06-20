@@ -21,7 +21,7 @@ const TAG_PAD_X = 6;
 
 /**
  * Paint a 1-based numbered box over each element and return the annotated image plus the
- * mark→element table. This is the core of the "visual tool": it lets the model ground an
+ * mark→element table. This is the core of the "visual scout": it lets the model ground an
  * action to a labeled box (a mark) instead of guessing pixel coordinates.
  */
 export function annotate(

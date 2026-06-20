@@ -2,7 +2,7 @@
 
 VRover 是一个面向 GUI 操作场景的视觉 AI agent：用 **Set-of-Mark (SoM)** 让模型「看见并定位」UI 元素，通过统一的 `Platform` 抽象驱动桌面或浏览器完成自动化任务。
 
-> 📐 长期架构构想（Visual Tool 胖工具 / UI 图 graph walker / 本地 server / DSL / 人类脚本）见 **[design.md](./design.md)**。
+> 📐 文档导航：[architecture.md](./architecture.md) 现状架构（代码为准） · [design.md](./design.md) 长期构想 · [decisions.md](./decisions.md) 设计决策（含节点身份方案） · [som.md](./som.md) SoM 感知模块。
 
 ## 架构
 
@@ -17,7 +17,7 @@ agent loop（observe → think → act）
 
 - `Platform` —— 统一接口，今天只有 `MockPlatform`（合成的登录界面）。未来 `DesktopPlatform`（Rust 经 napi-rs：xcap/enigo/AT-SPI）、`BrowserPlatform`（Playwright）各一份实现。
 - `llm/` —— 今天单家 Anthropic 直连；所有 SDK 调用集中在 `llm/anthropic.ts`，日后加 provider 只需加一个同签名函数。
-- `som/` —— 视觉工具，见 [visual_tool.md](./visual_tool.md)。元素来源最终要无障碍树/DOM + ML 视觉结合。
+- `som/` —— 视觉工具，见 [som.md](./som.md)。元素来源最终要无障碍树/DOM + 传统 CV/OCR 结合。
 
 ## 当前状态（首版里程碑：骨架 + 循环 + mock）
 
@@ -52,9 +52,9 @@ test/         vitest
 
 ## 路线图
 
-主线是 [design.md](./design.md) 里的 **Visual Tool = UI 图 graph walker** 方向（M1：图模型 + DSL + 多屏 mock 上的 walker）。下面是底层待补的能力：
+主线是 [design.md](./design.md) 里的 **Visual Scout = UI 图 graph walker** 方向（M1：图模型 + DSL + 多屏 mock 上的 walker）。下面是底层待补的能力：
 
 - Rust 原生平台层（napi-rs）+ 真实桌面（注意 xcap/Wayland 捕获的复杂度）
 - Playwright 浏览器平台
-- SoM 的 ML 视觉 grounding（onnxruntime）
+- SoM 的传统 CV/OCR grounding（实时感知）
 - LLM 抽象层（多 provider）
