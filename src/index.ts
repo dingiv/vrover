@@ -27,6 +27,7 @@ export { loadConfig } from './config.js';
 // Visual Scout — standalone TCP server (custom binary protocol) with per-connection sessions.
 export {
   startScoutServer,
+  ScoutClient,
   Session,
   Walker,
   GraphMap,

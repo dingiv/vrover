@@ -8,6 +8,7 @@
     "dev": "tsx examples/mock-run.ts",
     "scout": "tsx examples/scout-server.ts",
     "scout:run": "tsx examples/scout-run.ts",
+    "scout:client": "tsx examples/scout-client.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

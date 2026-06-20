@@ -13,6 +13,9 @@ export { Walker } from './walker.js';
 export { GraphMap } from './graph-map.js';
 export { PlatformGroundingSource } from './grounding.js';
 
+// Client SDK (thin JS API over the protocol; single home for the transport).
+export { ScoutClient } from './client/index.js';
+
 // Wire protocol (transport) + application message shapes (shared by server + client).
 export {
   MAGIC,
