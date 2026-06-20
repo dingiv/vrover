@@ -8,6 +8,8 @@
     { "path": "packages/llm" },
     { "path": "packages/tools" },
     { "path": "packages/scout" },
-    { "path": "packages/agent" }
+    { "path": "packages/agent" },
+    { "path": "apps/visual_scout" },
+    { "path": "apps/visual_rover" }
   ]
 }

@@ -248,6 +248,35 @@ importers:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@25.9.3)(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(tsx@4.22.4))
 
+  apps/visual_rover:
+    dependencies:
+      '@vrover/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@vrover/llm':
+        specifier: workspace:*
+        version: link:../../packages/llm
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+
+  apps/visual_scout:
+    dependencies:
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
+      '@vrover/scout':
+        specifier: workspace:*
+        version: link:../../packages/scout
+      '@vrover/scout-protocol':
+        specifier: workspace:*
+        version: link:../../packages/scout-protocol
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+
   packages/agent:
     dependencies:
       '@vrover/llm':

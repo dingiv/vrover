@@ -41,6 +41,9 @@ pnpm dev                      # 跑 examples/mock-run.ts：agent 对合成登录
 pnpm scout                    # 起 Visual Scout TCP server（无需 key，自定义二进制协议）
 pnpm scout:run                # 起 server + 大脑经 RemotePlatform 驱动它（需 key）
 pnpm scout:client             # 起 server + 用 ScoutClient SDK 脚本驱动登录（无需 key）
+pnpm scout:app                # 起独立 Visual Scout server 应用（CLI：--host/--port/--backend；无需 key）
+pnpm rover:app                # 起独立 VRover GUI agent server（serve：web UI + HTTP agent 服务；跑任务需 key）
+pnpm rover:app -- --mode cli --task "..."   # CLI 模式一次性跑一个任务
 ```
 
 ## 目录
@@ -57,6 +60,9 @@ packages/
   llm/             anthropic.ts + 协议类型 + loadConfig
   tools/           工具定义（click/type/scroll/keypress/done）+ mark→坐标 执行器
   agent/           runAgent 主循环、TaskResult、RemotePlatform（大脑；唯一消费 scout-client）
+apps/         独立应用实例（workspace 包，各自 CLI 启动）
+  visual_scout/   独立 Visual Scout server（CLI 参数启动，对外暴露 UI 操作服务）
+  visual_rover/   独立 VRover GUI agent server（CLI 启动；cli 前端 + web 前端，对外暴露 agent 服务）
 examples/     mock-run.ts / scout-server.ts / scout-run.ts / scout-client.ts
 test/         vitest
 ```

@@ -4,3 +4,6 @@ allowBuilds:
 
 packages:
   - 'packages/*'
+  - 'apps/visual_rover'
+  - 'apps/visual_scout'
+
