@@ -6,4 +6,5 @@ packages:
   - 'packages/*'
   - 'apps/visual_rover'
   - 'apps/visual_scout'
+  - 'apps/visual_scout_devtools'
 

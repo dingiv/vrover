@@ -14,6 +14,7 @@ import {
 } from '@vrover/scout-protocol';
 import { GraphMap } from './graph-map.js';
 import { Session } from './session.js';
+import { startDevtoolsServer, type DevtoolsServer } from './devtools.js';
 
 /**
  * The Visual Scout TCP server. A standalone process that exposes UI-operation +
@@ -47,6 +48,15 @@ export interface ScoutServerOptions {
   host?: string;
   /** Bind port. Default `SCOUT_PORT` env or `7878`. `0` = OS-assigned (for tests). */
   port?: number;
+  /**
+   * Also start the browser-facing **devtools** HTTP/SSE service on this port
+   * (`0` = OS-assigned). Omit to disable. Shares the session registry with the TCP server.
+   */
+  devtoolsPort?: number;
+  /** Devtools bind host (default `127.0.0.1`). */
+  devtoolsHost?: string;
+  /** Devtools SSE capture tick rate, ms (default 1000; runtime-tunable via `PUT /api/config`). */
+  devtoolsCaptureIntervalMs?: number;
   /** Progress sink; defaults to no-op. */
   log?: (message: string) => void;
 }
@@ -58,6 +68,8 @@ export interface ScoutServer {
   readonly port: number;
   /** Number of sessions currently open. */
   readonly sessionCount: number;
+  /** The browser-facing devtools service, if `devtoolsPort` was set. */
+  readonly devtools?: { host: string; port: number };
   /** Stop listening and close all connections. Resolves once the server is closed. */
   close(): Promise<void>;
 }
@@ -95,20 +107,36 @@ export function startScoutServer(opts: ScoutServerOptions): Promise<ScoutServer>
       const addr = server.address();
       const actualPort = typeof addr === 'object' && addr ? addr.port : port;
       log(`Visual Scout server listening on ${host}:${actualPort}`);
-      resolve({
-        host,
-        port: actualPort,
-        get sessionCount() {
-          return ctx.sessions.size;
-        },
-        close: () =>
-          new Promise<void>((resolveClose) => {
-            // Force-close live sockets so close() resolves promptly (test teardown).
-            for (const sock of ctx.sockets) sock.destroy();
-            ctx.sockets.clear();
-            server.close(() => resolveClose());
-          }),
-      });
+
+      const finalize = (devtools?: DevtoolsServer): void => {
+        resolve({
+          host,
+          port: actualPort,
+          get sessionCount() {
+            return ctx.sessions.size;
+          },
+          devtools: devtools ? { host: devtools.host, port: devtools.port } : undefined,
+          close: () =>
+            new Promise<void>((resolveClose) => {
+              // Force-close live sockets so close() resolves promptly (test teardown).
+              for (const sock of ctx.sockets) sock.destroy();
+              ctx.sockets.clear();
+              void devtools?.close().catch(() => {});
+              server.close(() => resolveClose());
+            }),
+        });
+      };
+
+      if (opts.devtoolsPort !== undefined) {
+        startDevtoolsServer(ctx, {
+          host: opts.devtoolsHost,
+          port: opts.devtoolsPort,
+          captureIntervalMs: opts.devtoolsCaptureIntervalMs,
+          log,
+        }).then(finalize, reject);
+      } else {
+        finalize(undefined);
+      }
     });
   });
 }

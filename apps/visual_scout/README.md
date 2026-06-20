@@ -21,7 +21,20 @@ pnpm scout:app -- --help                        # usage
 | `--host <host>` | `$SCOUT_HOST` or `127.0.0.1` | Bind host |
 | `--port <port>` | `$SCOUT_PORT` or `7878` | Bind port; `0` = OS-assigned |
 | `--backend <name>` | `multi-screen` | `multi-screen` \| `mock` \| `desktop` |
+| `--devtools-port <port>` | (off) | Expose the browser devtools HTTP/SSE service; `0` = OS-assigned |
+| `--devtools-host <host>` | `127.0.0.1` | Devtools bind host |
 | `-h, --help` | | Show usage |
+
+### DevTools
+
+Add `--devtools-port` to also expose a browser-friendly devtools service (HTTP/SSE) that reuses the
+same sessions as the TCP server — render screenshots, drive actions, configure state. Then run the
+web UI:
+
+```bash
+pnpm scout:app -- --devtools-port 7881
+pnpm devtools                       # serves the UI; see apps/visual_scout_devtools
+```
 
 ### Backends
 

@@ -1,0 +1,18 @@
+{
+  "name": "@vrover/visual-scout-devtools",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser DevTools UI for the Visual Scout server (talks to the scout in-process HTTP/SSE devtools service).",
+  "main": "./src/main.ts",
+  "bin": {
+    "visual-scout-devtools": "./src/main.ts"
+  },
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
+  }
+}

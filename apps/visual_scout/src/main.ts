@@ -9,6 +9,7 @@
  *   pnpm scout:app                                  # defaults (multi-screen on SCOUT_HOST:SCOUT_PORT)
  *   pnpm scout:app -- --host 0.0.0.0 --port 9000    # bind publicly on 9000
  *   pnpm scout:app -- --backend mock                # use the single-screen mock
+ *   pnpm scout:app -- --devtools-port 7881          # also expose the browser devtools service
  *
  * Host/port default to `SCOUT_HOST`/`SCOUT_PORT` (then `127.0.0.1` / `7878`), mirroring
  * the server itself. A client may also hint a backend in its handshake; see
@@ -30,6 +31,8 @@ Options:
   --backend <name>    Default backend terminal (default: ${DEFAULT_BACKEND})
                       One of: ${BACKEND_NAMES.join(', ')}
                       A client may override this via its handshake 'backend' hint.
+  --devtools-port <port>  Also expose the browser devtools HTTP/SSE service (off unless set; 0 = OS-assigned)
+  --devtools-host <host>  Devtools bind host (default: 127.0.0.1)
   -h, --help          Show this help and exit
 
 Each connecting client handshakes → gets a fresh session + isolated backend terminal.
@@ -41,6 +44,8 @@ function main(): void {
       host: { type: 'string' },
       port: { type: 'string' },
       backend: { type: 'string' },
+      'devtools-port': { type: 'string' },
+      'devtools-host': { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
     args: forwardedArgs(),
@@ -60,22 +65,36 @@ function main(): void {
     process.exit(2);
   }
 
-  void run({ host, port, defaultBackend });
+  const devtoolsPort = values['devtools-port'] === undefined ? undefined : parsePort(values['devtools-port']);
+  const devtoolsHost = values['devtools-host'];
+
+  void run({ host, port, defaultBackend, devtoolsHost, devtoolsPort });
 }
 
 /** Resolve + bind the server, then keep it running until interrupted. */
-async function run(opts: { host: string; port: number; defaultBackend: string }): Promise<void> {
-  const { host, port, defaultBackend } = opts;
+async function run(opts: {
+  host: string;
+  port: number;
+  defaultBackend: string;
+  devtoolsHost?: string;
+  devtoolsPort?: number;
+}): Promise<void> {
+  const { host, port, defaultBackend, devtoolsHost, devtoolsPort } = opts;
   const server = await startScoutServer({
     host,
     port,
     backendFactory: (req) => resolveBackend(req, defaultBackend).create(),
     backendName: defaultBackend,
+    devtoolsHost,
+    devtoolsPort,
     log: (m) => console.log(m),
   });
 
   console.log(`\nVisual Scout server ready at ${server.host}:${server.port} (TCP, custom binary protocol)`);
   console.log(`  default backend: ${defaultBackend}  (handshake 'backend' hint can override per client)`);
+  if (server.devtools) {
+    console.log(`  devtools service: http://${server.devtools.host}:${server.devtools.port}  (open with: pnpm devtools -- --api http://${server.devtools.host}:${server.devtools.port})`);
+  }
   console.log('\nPress Ctrl+C to stop.');
 
   process.on('SIGINT', async () => {

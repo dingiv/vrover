@@ -7,6 +7,8 @@
  */
 export { startScoutServer } from './server.js';
 export type { ScoutServer, ScoutServerOptions } from './server.js';
+export { startDevtoolsServer } from './devtools.js';
+export type { DevtoolsServer, DevtoolsOptions, DevtoolsContext, DevtoolsConfig } from './devtools.js';
 export { Session } from './session.js';
 export { PlatformGroundingSource } from './grounding.js';
 export { Walker } from './walker.js';

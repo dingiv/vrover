@@ -44,6 +44,8 @@ pnpm scout:client             # 起 server + 用 ScoutClient SDK 脚本驱动登
 pnpm scout:app                # 起独立 Visual Scout server 应用（CLI：--host/--port/--backend；无需 key）
 pnpm rover:app                # 起独立 VRover GUI agent server（serve：web UI + HTTP agent 服务；跑任务需 key）
 pnpm rover:app -- --mode cli --task "..."   # CLI 模式一次性跑一个任务
+pnpm scout:app -- --devtools-port 7881       # scout 同时暴露浏览器 devtools 服务（HTTP/SSE，复用 session）
+pnpm devtools                                 # 起 Scout DevTools web UI（浏览器打开，驱动 devtools 服务）
 ```
 
 ## 目录
@@ -54,15 +56,16 @@ pnpm monorepo（`packages/*` 每个子目录一个 workspace 包）：
 packages/
   scout-protocol/  线协议（二进制帧 + 消息 + UiElement/Bounds）——client 与 server 共享契约（leaf）
   scout-client/    ScoutClient SDK（仅依赖 scout-protocol，面向第三方开发人员）
-  scout/           Visual Scout TCP server（server/session/grounding/walker/graph-map）
+  scout/           Visual Scout TCP server（server/session/devtools/grounding/walker/graph-map）
   platform/        Platform 接口 + Mock/MultiScreen/Desktop + 类型（UiElement/Bounds 来自 scout-protocol）
   som/             SoM 标注 + 元素表
   llm/             anthropic.ts + 协议类型 + loadConfig
   tools/           工具定义（click/type/scroll/keypress/done）+ mark→坐标 执行器
   agent/           runAgent 主循环、TaskResult、RemotePlatform（大脑；唯一消费 scout-client）
 apps/         独立应用实例（workspace 包，各自 CLI 启动）
-  visual_scout/   独立 Visual Scout server（CLI 参数启动，对外暴露 UI 操作服务）
+  visual_scout/   独立 Visual Scout server（CLI 启动；对外暴露 UI 操作服务；--devtools-port 开 HTTP/SSE devtools 服务）
   visual_rover/   独立 VRover GUI agent server（CLI 启动；cli 前端 + web 前端，对外暴露 agent 服务）
+  visual_scout_devtools/  Scout 浏览器 DevTools UI（HTTP/SSE 驱动 scout devtools 服务）
 examples/     mock-run.ts / scout-server.ts / scout-run.ts / scout-client.ts
 test/         vitest
 ```

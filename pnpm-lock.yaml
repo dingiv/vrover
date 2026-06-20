@@ -277,6 +277,12 @@ importers:
         specifier: ^4.22.4
         version: 4.22.4
 
+  apps/visual_scout_devtools:
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
+
   packages/agent:
     dependencies:
       '@vrover/llm':

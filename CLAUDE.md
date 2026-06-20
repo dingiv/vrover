@@ -20,7 +20,7 @@ pnpm exec vitest run -t "handshakes a new client"  # by test name
 
 Runnable entry points (all via `tsx`, so `pnpm <script>`):
 - Examples (thin demos, env-var configured): `pnpm dev`, `pnpm scout`, `pnpm scout:run`, `pnpm scout:client`.
-- Standalone apps (CLI-arg configured, see `apps/`): `pnpm scout:app`, `pnpm rover:app`, `pnpm rover:cli`. Pass args with `pnpm <script> -- <args>` (e.g. `pnpm scout:app -- --port 9000`).
+- Standalone apps (CLI-arg configured, see `apps/`): `pnpm scout:app`, `pnpm rover:app`, `pnpm rover:cli`, `pnpm devtools`. Pass args with `pnpm <script> -- <args>` (e.g. `pnpm scout:app -- --port 9000`).
 
 API keys: only the real LLM path needs `ANTHROPIC_API_KEY` (copy `.env.example` → `.env`). The Scout server, the apps' boot, and all tests run **without** a key.
 
@@ -36,13 +36,15 @@ The brain never touches the OS directly. It drives Scout over a **custom binary 
 
 **Scout protocol** (`@vrover/scout-protocol`): 12-byte big-endian header `[magic 'SC'][ver][type][id u32][len u32]` + JSON or raw-BLOB payload. A client sends `HAND_SHAKE` first; the server mints a per-connection **session**, each with its own `Platform` backend (capture + keyboard/mouse), and replies `HAND_SHAKE_ACK`. Screenshots cross the wire as raw PNG BLOBs (no base64). `UiElement`/`Bounds` are JSON-serializable and pass through as-is.
 
+**Scout devtools service** (`@vrover/scout` `devtools.ts`; opt-in via `startScoutServer({devtoolsPort})` or `scout:app -- --devtools-port`): a second, **browser-friendly HTTP+SSE** port on the scout process. Browsers can't speak the raw TCP protocol, so this service is **in-process** — it builds plain `Request` objects and calls `Session.dispatch` (the *identical* path TCP clients take; captures decoded via `decodeCaptureBlob`), exposing REST (`/api/sessions`, `/:id/capture` (image/png), `/elements`, `/click|type|scroll|keypress`, `/config`) + SSE (`/:id/stream`) with permissive CORS. The web UI is `apps/visual_scout_devtools` (`pnpm devtools`). The TCP protocol stays untouched — devtools is an additive control plane sharing the session registry.
+
 **Package dependency graph (acyclic):**
 ```
 @vrover/scout-protocol (leaf)  ← { scout-client, platform }
 platform                        ← { som, tools, scout, agent }
 @vrover/agent                   ← consumes scout-client (the project's ONLY internal consumer of the standalone SDK, keeping it third-party-independent)
 @vrover/llm (leaf)
-apps/{visual_scout,visual_rover}      ← consumers (apps, not libraries)
+apps/{visual_scout,visual_rover,visual_scout_devtools}  ← consumers (apps, not libraries; the devtools app has no @vrover deps — pure HTTP client)
 ```
 
 **Key seams (where to plug things in):**
