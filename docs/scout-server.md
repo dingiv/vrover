@@ -17,7 +17,7 @@ VRover（大脑）                                                Visual Scout s
    ① HAND_SHAKE {client, backend?}  ───────────────────────────▶▶│     backendFactory(req) → new Session(id, backend)
    ② HAND_SHAKE_ACK {sessionId,version,backend} ◀────────────────│     （session 持有 walker 占位）
    ③ REQUEST/RESULT/BLOB ◀────────────▶ 按 method 路由到 session.backend │  socket 关闭 → session 销毁
-                                                                  │     GroundingSource（④ 缝，src/scout/grounding.ts）
+                                                                  │     GroundingSource（④ 缝，@vrover/scout/grounding）
 ```
 
 关键：`Platform` 接口（`@vrover/platform`）是后端替换缝；`MultiScreenPlatform` / `DesktopPlatform` 都实现它；`RemotePlatform`（`@vrover/agent`）是大脑侧 TCP client。Server 用 `backendFactory: (req) => Platform` **每个会话铸造一个新后端**，客户端之间完全隔离。
@@ -121,7 +121,7 @@ packages/platform/         MultiScreenPlatform（backendFactory 默认产出）/
 
 ## Rust 缝（预留，本轮不实现）
 
-「关键高性能部分用 Rust」落在 `src/platform/desktop.ts`：`NativeLayer` 是未来 napi-rs 模块要满足的 TS 契约（xcap 截图 / enigo 键鼠 / AT-SPI 无障碍树），`DesktopPlatform` 把这些原语组装成 `Platform`。本轮没有 Rust 构建；未提供 `NativeLayer` 时 `DesktopPlatform` 每个方法抛清晰错误。等 napi-rs 落地，实现 `NativeLayer` 即可，`backendFactory` 可按握手 `backend` 字段返回它。
+「关键高性能部分用 Rust」落在 `@vrover/platform`（`desktop.ts`）：`NativeLayer` 是未来 napi-rs 模块要满足的 TS 契约（xcap 截图 / enigo 键鼠 / AT-SPI 无障碍树），`DesktopPlatform` 把这些原语组装成 `Platform`。本轮没有 Rust 构建；未提供 `NativeLayer` 时 `DesktopPlatform` 每个方法抛清晰错误。等 napi-rs 落地，实现 `NativeLayer` 即可，`backendFactory` 可按握手 `backend` 字段返回它。
 
 ## 测试（无需 API key）
 

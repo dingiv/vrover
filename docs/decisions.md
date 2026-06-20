@@ -105,8 +105,8 @@
 
 | 组件 | 职责 | 现状 |
 |---|---|---|
-| **VRover**（GUI agent / 大脑） | agent loop；任务理解 / 规划；调用**视觉模型服务**（多模态大模型）思考；消费 walker 给的「当前 node + 高层操作」，走不通回退 SoM | `src/agent` + `src/llm` 已落地（in-process） |
-| **Visual Scout**（胖工具） | ① UI 交互：截图捕获 + 键鼠注入（= Platform 原语）② **UI graph map**：共享 · 持久的应用图（node/edge/DSL）③ **UI walker**：每连接一个，维护当前界面状态 + 遍历栈 ④ grounding：capture → elements，靠**内部传统 CV + OCR**（廉价 · 实时）→ NodeProfile | `src/platform` + `src/som` 是 ①④ 的雏形；②③ + CV/OCR 未实现（= M1 / M3） |
+| **VRover**（GUI agent / 大脑） | agent loop；任务理解 / 规划；调用**视觉模型服务**（多模态大模型）思考；消费 walker 给的「当前 node + 高层操作」，走不通回退 SoM | `@vrover/agent` + `@vrover/llm` 已落地 |
+| **Visual Scout**（胖工具） | ① UI 交互：截图捕获 + 键鼠注入（= Platform 原语）② **UI graph map**：共享 · 持久的应用图（node/edge/DSL）③ **UI walker**：每连接一个，维护当前界面状态 + 遍历栈 ④ grounding：capture → elements，靠**内部传统 CV + OCR**（廉价 · 实时）→ NodeProfile | `@vrover/scout`（+ `-protocol`/`-client`）+ `@vrover/platform` + `@vrover/som` 是 ①④ 的雏形；②③ + CV/OCR 未实现（= M1 / M3） |
 | **视觉模型服务**（多模态大模型） | VRover 大脑调用的**多模态大模型**（第三方厂商提供，如 Claude）；能看图 / 推理 / 决策 | **暂用第三方**，后期再议自训练；本轮不展开 |
 
 > ⚠️ **关键澄清**：「视觉模型服务」= VRover 的**大脑大模型**（多模态），**不是** grounding 服务。Visual Scout **不调**多模态大模型，④ grounding 全靠内部 CV/OCR。

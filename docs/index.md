@@ -15,26 +15,21 @@ agent loop（observe → think → act）
 
 核心设计：**action 用 SoM「编号(mark)」引用元素，而非裸坐标**。这让模型只挑编号，定位精度交给真实的元素边界框；`Platform` 保持坐标导向，贴合真实鼠标键盘。
 
-- `Platform` —— 统一接口，今天只有 `MockPlatform`（合成的登录界面）。未来 `DesktopPlatform`（Rust 经 napi-rs：xcap/enigo/AT-SPI）、`BrowserPlatform`（Playwright）各一份实现。
-- `llm/` —— 今天单家 Anthropic 直连；所有 SDK 调用集中在 `llm/anthropic.ts`，日后加 provider 只需加一个同签名函数。
-- `som/` —— 视觉工具，见 [som.md](./som.md)。元素来源最终要无障碍树/DOM + 传统 CV/OCR 结合。
+- `@vrover/platform` —— 统一 `Platform` 接口：今天 `MockPlatform` / `MultiScreenPlatform`（合成登录界面）。未来 `DesktopPlatform`（Rust 经 napi-rs：xcap/enigo/AT-SPI）、`BrowserPlatform`（Playwright）各一份实现。
+- `@vrover/llm` —— 今天单家 Anthropic 直连；所有 SDK 调用集中在此，日后加 provider 只需加一个同签名函数。
+- `@vrover/som` —— 视觉工具，见 [som.md](./som.md)。元素来源最终要无障碍树/DOM + 传统 CV/OCR 结合。
 
-## 当前状态（首版里程碑：骨架 + 循环 + mock）
+> 契约细节（`Platform` / `CompleteFn` / SoM / 工具面 / loop）见 [architecture.md](./architecture.md)；包结构与依赖图见下方「目录」。
 
-- ✅ TypeScript 项目骨架（pnpm + ESM + 严格模式）、vitest、tsx
-- ✅ `Platform` / `SoM` / `Action` / agent loop 核心抽象与契约
-- ✅ `MockPlatform`：合成 1280×800 登录界面，真实 PNG 渲染 + 命中测试 + 登录状态机
-- ✅ SoM 标注流水线（@napi-rs/canvas 画编号框）
-- ✅ Anthropic 适配器（视觉 + tool use）+ 可注入的 `complete` 接口（测试用假 LLM，零 API 成本）
-- ✅ 16 个单测/集成测试全绿，`tsc --noEmit` 通过
+## 当前状态
 
-## 当前状态（二：Visual Scout server）
-
-- ✅ **Visual Scout 落地为独立 TCP server**（D4/D10）：`net` + 自定义二进制协议，零 web 依赖；客户端握手后建立 **session**，每个 session 拥有独立操作终端（`Platform` = 截屏器 + 键鼠）并预留 walker 状态。对外暴露 UI 操作 + grounding（①④）。见 [scout-server.md](./scout-server.md)。
-- ✅ **`RemotePlatform`**：大脑侧 TCP client，drop-in 替换 `MockPlatform`——`runAgent` 一行不改即可驱动远端 Scout。
-- ✅ **`MultiScreenPlatform`**：扩展 Mock（login→home 两屏），`backendFactory` 默认产出；`MockPlatform` 及其测试保留不动。
+- ✅ **TypeScript monorepo**（pnpm workspace，`packages/*`，8 个包，依赖图无环）。开发用 source-resolving exports——tsx/vitest 直读 TS，无需 build；`pnpm build` 经 TS project references 产出各包 `dist/`。
+- ✅ **核心抽象与循环**：`Platform` / `SoM` / `Action` / agent loop（observe→think→act）；`MockPlatform` + `MultiScreenPlatform`（合成登录/主页，真实 PNG + 命中测试）。
+- ✅ **LLM 出口**：Anthropic 适配器（视觉 + tool use）+ 可注入 `complete`（测试用假 LLM，零 key）；`loadConfig` 折进 `@vrover/llm`。
+- ✅ **Visual Scout = 独立 TCP server**（D4/D10）：自定义二进制协议；握手建会话，每会话独立 `Platform` 终端（截屏器 + 键鼠）+ walker 占位。见 [scout-server.md](./scout-server.md)。
+- ✅ **客户端 SDK**（`@vrover/scout-client`）：面向第三方的薄 JS API，**只依赖协议**；`RemotePlatform`（`@vrover/agent`）是项目内唯一消费它的地方，故 SDK 对第三方独立。
 - ✅ **预留 Rust 缝**：`NativeLayer` + `DesktopPlatform` stub，等真桌面 capture / CV-OCR 时用 napi-rs 填。
-- ✅ 40 个测试全绿（含端到端组件拆分：agent 经 TCP 把 server 后端登录跑通、会话隔离），`tsc --noEmit` 通过。
+- ✅ **43 个测试全绿**（含端到端组件拆分：agent 经 TCP 把 server 后端登录跑通、会话隔离、SDK 登录），`tsc --noEmit` 通过。
 
 ## 快速开始
 
@@ -45,6 +40,7 @@ pnpm test                     # 单测 + 注入假 LLM 的 loop 集成测试（�
 pnpm dev                      # 跑 examples/mock-run.ts：agent 对合成登录界面完成登录
 pnpm scout                    # 起 Visual Scout TCP server（无需 key，自定义二进制协议）
 pnpm scout:run                # 起 server + 大脑经 RemotePlatform 驱动它（需 key）
+pnpm scout:client             # 起 server + 用 ScoutClient SDK 脚本驱动登录（无需 key）
 ```
 
 ## 目录
@@ -65,13 +61,11 @@ examples/     mock-run.ts / scout-server.ts / scout-run.ts / scout-client.ts
 test/         vitest
 ```
 
-依赖图（无环）：`scout-protocol`(leaf) ← {`scout-client`, `platform`}；`platform` ← {`som`, `tools`, `scout`, `agent`}；`agent` ← 消费 `scout-client`。开发用 source-resolving exports（`exports → ./src/index.ts`），tsx/vitest 直接读 TS，无需 build；`pnpm build` 经 project references 产出各包 `dist/`。
-
-> 注：`docs/architecture.md`、`decisions.md`、`design.md`、`som.md` 仍按旧 `src/` 路径描述概念，文件位置以上面 `packages/` 为准——概念文档待后续统一刷新。
+依赖图（无环）：`scout-protocol`(leaf) ← {`scout-client`, `platform`}；`platform` ← {`som`, `tools`, `scout`, `agent`}；`agent` ← 消费 `scout-client`。
 
 ## 路线图
 
-主线是 [design.md](./design.md) 里的 **Visual Scout = UI 图 graph walker** 方向。Visual Scout 现已是**独立 HTTP server**（见 [scout-server.md](./scout-server.md)），当前对外提供 UI 操作 + grounding（①④）；接下来在其上叠 **graph map + walker**（②③，含节点身份 D1、DSL D2、`go_back`、按 node 动态注入高层操作）。底层待补的能力：
+主线是 [design.md](./design.md) 里的 **Visual Scout = UI 图 graph walker** 方向。Visual Scout 现已是**独立 TCP server**（见 [scout-server.md](./scout-server.md)），当前对外提供 UI 操作 + grounding（①④）；接下来在其上叠 **graph map + walker**（②③，含节点身份 D1、DSL D2、`go_back`、按 node 动态注入高层操作）。底层待补的能力：
 
 - graph map + walker（D10 ②③）—— Scout server 内的下一层
 - Rust 原生平台层（napi-rs，填 `NativeLayer`）+ 真实桌面（注意 xcap/Wayland 捕获的复杂度）
