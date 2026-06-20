@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createCanvas } from '@napi-rs/canvas';
-import { annotate, formatTable } from '../src/som/index.js';
-import type { Screenshot, UiElement } from '../src/platform/types.js';
+import { annotate, formatTable } from '@vrover/som';
+import type { Screenshot, UiElement } from '@vrover/platform';
 
 function shot(): Screenshot {
   const c = createCanvas(200, 150);

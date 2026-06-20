@@ -11,11 +11,10 @@
  * read the screen back over TCP and assert we reached the home (logged-in) screen —
  * proving the agent drove the server-side backend across the network boundary.
  */
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { startScoutServer } from '../src/scout/server.js';
-import { RemotePlatform } from '../src/platform/remote.js';
-import { runAgent } from '../src/agent/loop.js';
-import { complete as completeAnthropic } from '../src/llm/anthropic.js';
+import { MultiScreenPlatform } from '@vrover/platform';
+import { startScoutServer } from '@vrover/scout';
+import { RemotePlatform, runAgent } from '@vrover/agent';
+import { complete as completeAnthropic } from '@vrover/llm';
 
 const server = await startScoutServer({
   backendFactory: () => new MultiScreenPlatform(),

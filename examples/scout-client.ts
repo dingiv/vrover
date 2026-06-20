@@ -6,10 +6,9 @@
  *
  *   pnpm scout:client
  */
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { startScoutServer } from '../src/scout/server.js';
-import { ScoutClient } from '../src/scout/client/index.js';
-import { centerOf } from '../src/platform/types.js';
+import { MultiScreenPlatform, centerOf } from '@vrover/platform';
+import { startScoutServer } from '@vrover/scout';
+import { ScoutClient } from '@vrover/scout-client';
 
 const server = await startScoutServer({
   backendFactory: () => new MultiScreenPlatform(),

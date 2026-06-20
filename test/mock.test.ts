@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MockPlatform } from '../src/platform/mock.js';
-import { centerOf } from '../src/platform/types.js';
+import { MockPlatform, centerOf } from '@vrover/platform';
 
 describe('MockPlatform', () => {
   it('exposes the interactive elements', async () => {

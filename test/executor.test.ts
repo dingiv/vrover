@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Platform, Screenshot, UiElement } from '../src/platform/types.js';
-import type { SoMElement } from '../src/som/types.js';
-import { dispatch } from '../src/tools/executor.js';
+import type { Platform, Screenshot, UiElement } from '@vrover/platform';
+import type { SoMElement } from '@vrover/som';
+import { dispatch } from '@vrover/tools';
 
 /** Minimal Platform that records what the executor drove it to do. */
 class RecordingPlatform implements Platform {

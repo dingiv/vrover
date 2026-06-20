@@ -2,8 +2,8 @@
   "name": "visual-rover",
   "version": "0.1.0",
   "description": "VRover — a visual GUI agent with Set-of-Mark grounding. Desktop + browser targets behind a unified Platform abstraction, pluggable LLM.",
+  "private": true,
   "type": "module",
-  "main": "dist/index.js",
   "scripts": {
     "dev": "tsx examples/mock-run.ts",
     "scout": "tsx examples/scout-server.ts",
@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc"
+    "build": "tsc --build tsconfig.build.json"
   },
   "keywords": [
     "gui-agent",
@@ -34,12 +34,17 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.104.2",
-    "@napi-rs/canvas": "^1.0.0",
-    "dotenv": "^17.4.2",
-    "zod": "^4.4.3"
+    "@vrover/agent": "workspace:*",
+    "@vrover/llm": "workspace:*",
+    "@vrover/platform": "workspace:*",
+    "@vrover/scout": "workspace:*",
+    "@vrover/scout-client": "workspace:*",
+    "@vrover/scout-protocol": "workspace:*",
+    "@vrover/som": "workspace:*",
+    "@vrover/tools": "workspace:*"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.0",
     "@types/node": "^25.9.3",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",

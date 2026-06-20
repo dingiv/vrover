@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DesktopPlatform } from '../src/platform/desktop.js';
-import type { NativeLayer } from '../src/platform/desktop.js';
+import { DesktopPlatform, type NativeLayer } from '@vrover/platform';
 
 /**
  * The Rust seam is reserved but not wired this iteration. Without a NativeLayer,

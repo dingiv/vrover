@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { startScoutServer } from '../src/scout/server.js';
-import type { ScoutServer } from '../src/scout/server.js';
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { RemotePlatform } from '../src/platform/remote.js';
-import { centerOf } from '../src/platform/types.js';
+import { startScoutServer, type ScoutServer } from '@vrover/scout';
+import { MultiScreenPlatform, centerOf } from '@vrover/platform';
+import { RemotePlatform } from '@vrover/agent';
 
 /**
  * The brain-side client. Each test spins up a fresh Scout server (per-session

@@ -1,11 +1,9 @@
 import net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { startScoutServer } from '../src/scout/server.js';
-import type { ScoutServer } from '../src/scout/server.js';
-import { RemotePlatform } from '../src/platform/remote.js';
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { centerOf } from '../src/platform/types.js';
-import { FrameDecoder, MsgType, encodeJsonFrame, type Frame } from '../src/scout/protocol.js';
+import { startScoutServer, type ScoutServer } from '@vrover/scout';
+import { RemotePlatform } from '@vrover/agent';
+import { MultiScreenPlatform, centerOf } from '@vrover/platform';
+import { FrameDecoder, MsgType, encodeJsonFrame, type Frame } from '@vrover/scout-protocol';
 
 /**
  * Integration tests for the Scout TCP server: the protocol-level handshake rules

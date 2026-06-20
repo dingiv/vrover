@@ -10,7 +10,7 @@ import {
   encodeFrame,
   encodeJsonFrame,
   type Frame,
-} from '../src/scout/protocol.js';
+} from '@vrover/scout-protocol';
 
 /**
  * Unit tests for the wire protocol: framing encode/decode, split-chunk

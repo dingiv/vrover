@@ -12,7 +12,7 @@ Visual Scout 是一个**独立进程**，把 GUI 目标的 **UI 操作 + groundi
 ```
 VRover（大脑）                                                Visual Scout server（独立进程）
   runAgent ── RemotePlatform ────── TCP（自定义二进制协议）──────▶ net.createServer
-              (src/platform/remote.ts)                            │  server 级状态：session 注册表 + 共享 GraphMap（占位）
+              (@vrover/agent: RemotePlatform)                     │  server 级状态：session 注册表 + 共享 GraphMap（占位）
                                                                   │  每条连接：
    ① HAND_SHAKE {client, backend?}  ───────────────────────────▶▶│     backendFactory(req) → new Session(id, backend)
    ② HAND_SHAKE_ACK {sessionId,version,backend} ◀────────────────│     （session 持有 walker 占位）
@@ -20,7 +20,7 @@ VRover（大脑）                                                Visual Scout s
                                                                   │     GroundingSource（④ 缝，src/scout/grounding.ts）
 ```
 
-关键：`Platform` 接口（`src/platform/types.ts`）是后端替换缝；`RemotePlatform` / `MultiScreenPlatform` / `DesktopPlatform` 都实现它。Server 用 `backendFactory: (req) => Platform` **每个会话铸造一个新后端**，客户端之间完全隔离。
+关键：`Platform` 接口（`@vrover/platform`）是后端替换缝；`MultiScreenPlatform` / `DesktopPlatform` 都实现它；`RemotePlatform`（`@vrover/agent`）是大脑侧 TCP client。Server 用 `backendFactory: (req) => Platform` **每个会话铸造一个新后端**，客户端之间完全隔离。
 
 ## 状态：server 级 vs session 级
 
@@ -31,7 +31,7 @@ VRover（大脑）                                                Visual Scout s
 
 > 对应 D10：**graph map 是知识**（server 级、跨连接共享）；**walker 是会话状态**（session 级）。N 个连接 ⇒ N 个 session/walker ⇒ 共享 1 份 GraphMap。当前 `Walker` / `GraphMap` 都是**空占位**，等 D1（节点身份）/D2（DSL）定了再填逻辑。
 
-## 协议（`src/scout/protocol.ts`）
+## 协议（`packages/scout-protocol/`）
 
 二进制帧。**12 字节大端头 + payload**：
 
@@ -101,22 +101,22 @@ pnpm scout:run
 
 host/port 由 `SCOUT_HOST` / `SCOUT_PORT` 控制（server 直接读环境变量，**不**走 `loadConfig()`，所以无 API key 也能跑）。
 
-## 模块
+## 模块（pnpm workspace）
 
 ```
-src/scout/
-  protocol.ts   二进制帧（头/magic/type/FrameDecoder/BLOB 编解码）—— 传输层单一契约
+packages/scout-protocol/   线协议（传输层单一契约；leaf，被 client 与 server 共享）
+  protocol.ts   二进制帧（头/magic/type/FrameDecoder/BLOB 编解码）
   api.ts        应用消息形状（Request method/Handshake*/Result/Error）+ 校验/编解码
+  types.ts      UiElement / Bounds / CaptureResult（client 唯一依赖的类型来源）
+packages/scout-client/     ScoutClient SDK（仅依赖 scout-protocol，面向第三方开发人员）
+  scout-client.ts  connect/capture/elements/click/type/scroll/keypress/close
+packages/scout/            Visual Scout TCP server
   server.ts     startScoutServer（net.createServer，握手→建 session→路由 REQUEST）
-  session.ts    Session（session 级状态：backend + grounding + walker 占位，dispatch method）
+  session.ts    Session（session 级状态：backend + grounding + walker 占位）
   grounding.ts  PlatformGroundingSource（④ 缝，tier-1 直通 backend.getElements）
-  walker.ts     Walker 占位（per-session 图遍历状态，待 D1/D2）
-  graph-map.ts  GraphMap 占位（server 级共享应用图，待 D1/D2）
-  index.ts      barrel
-src/platform/
-  remote.ts     RemotePlatform（大脑侧 TCP client，drop-in 替换 MockPlatform）
-  multi-screen.ts  MultiScreenPlatform（扩展 Mock，login→home，backendFactory 默认产出）
-  desktop.ts    NativeLayer 接口 + DesktopPlatform stub（Rust 缝）
+  walker.ts / graph-map.ts  占位（待 D1/D2）
+packages/agent/            runAgent + RemotePlatform（大脑侧 TCP client；唯一消费 scout-client）
+packages/platform/         MultiScreenPlatform（backendFactory 默认产出）/ MockPlatform / DesktopPlatform stub（Rust 缝）
 ```
 
 ## Rust 缝（预留，本轮不实现）

@@ -49,17 +49,25 @@ pnpm scout:run                # 起 server + 大脑经 RemotePlatform 驱动它�
 
 ## 目录
 
+pnpm monorepo（`packages/*` 每个子目录一个 workspace 包）：
+
 ```
-src/
-  agent/      runAgent 主循环、TaskResult
-  platform/   Platform 接口、MockPlatform、MultiScreenPlatform、RemotePlatform、DesktopPlatform
-  som/        SoM 标注 + 元素表
-  scout/      Visual Scout TCP server（protocol/api/server/session/grounding/walker/graph-map）——独立 UI 操作服务
-  llm/        anthropic.ts（唯一 LLM 出口）+ 协议类型
-  tools/      工具定义（click/type/scroll/keypress/done）+ mark→坐标 执行器
-examples/     mock-run.ts / scout-server.ts / scout-run.ts
+packages/
+  scout-protocol/  线协议（二进制帧 + 消息 + UiElement/Bounds）——client 与 server 共享契约（leaf）
+  scout-client/    ScoutClient SDK（仅依赖 scout-protocol，面向第三方开发人员）
+  scout/           Visual Scout TCP server（server/session/grounding/walker/graph-map）
+  platform/        Platform 接口 + Mock/MultiScreen/Desktop + 类型（UiElement/Bounds 来自 scout-protocol）
+  som/             SoM 标注 + 元素表
+  llm/             anthropic.ts + 协议类型 + loadConfig
+  tools/           工具定义（click/type/scroll/keypress/done）+ mark→坐标 执行器
+  agent/           runAgent 主循环、TaskResult、RemotePlatform（大脑；唯一消费 scout-client）
+examples/     mock-run.ts / scout-server.ts / scout-run.ts / scout-client.ts
 test/         vitest
 ```
+
+依赖图（无环）：`scout-protocol`(leaf) ← {`scout-client`, `platform`}；`platform` ← {`som`, `tools`, `scout`, `agent`}；`agent` ← 消费 `scout-client`。开发用 source-resolving exports（`exports → ./src/index.ts`），tsx/vitest 直接读 TS，无需 build；`pnpm build` 经 project references 产出各包 `dist/`。
+
+> 注：`docs/architecture.md`、`decisions.md`、`design.md`、`som.md` 仍按旧 `src/` 路径描述概念，文件位置以上面 `packages/` 为准——概念文档待后续统一刷新。
 
 ## 路线图
 

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { centerOf } from '../src/platform/types.js';
+import { MultiScreenPlatform, centerOf } from '@vrover/platform';
 
 describe('MultiScreenPlatform', () => {
   it('shows the login screen first', async () => {

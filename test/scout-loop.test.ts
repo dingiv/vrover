@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { startScoutServer } from '../src/scout/server.js';
-import type { ScoutServer } from '../src/scout/server.js';
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { RemotePlatform } from '../src/platform/remote.js';
-import { runAgent } from '../src/agent/loop.js';
-import type { CompleteFn } from '../src/llm/types.js';
+import { startScoutServer, type ScoutServer } from '@vrover/scout';
+import { MultiScreenPlatform } from '@vrover/platform';
+import { RemotePlatform, runAgent } from '@vrover/agent';
+import type { CompleteFn } from '@vrover/llm';
 
 /**
  * End-to-end component-split test: the UNMODIFIED agent loop drives a Visual Scout

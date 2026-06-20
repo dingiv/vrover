@@ -207,19 +207,34 @@ importers:
 
   .:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.104.2
-        version: 0.104.2(zod@4.4.3)
+      '@vrover/agent':
+        specifier: workspace:*
+        version: link:packages/agent
+      '@vrover/llm':
+        specifier: workspace:*
+        version: link:packages/llm
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:packages/platform
+      '@vrover/scout':
+        specifier: workspace:*
+        version: link:packages/scout
+      '@vrover/scout-client':
+        specifier: workspace:*
+        version: link:packages/scout-client
+      '@vrover/scout-protocol':
+        specifier: workspace:*
+        version: link:packages/scout-protocol
+      '@vrover/som':
+        specifier: workspace:*
+        version: link:packages/som
+      '@vrover/tools':
+        specifier: workspace:*
+        version: link:packages/tools
+    devDependencies:
       '@napi-rs/canvas':
         specifier: ^1.0.0
         version: 1.0.0
-      dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
       '@types/node':
         specifier: ^25.9.3
         version: 25.9.3
@@ -232,6 +247,83 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@25.9.3)(vite@8.0.16(@types/node@25.9.3)(esbuild@0.28.1)(tsx@4.22.4))
+
+  packages/agent:
+    dependencies:
+      '@vrover/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:../platform
+      '@vrover/scout-client':
+        specifier: workspace:*
+        version: link:../scout-client
+      '@vrover/som':
+        specifier: workspace:*
+        version: link:../som
+      '@vrover/tools':
+        specifier: workspace:*
+        version: link:../tools
+
+  packages/llm:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.104.2
+        version: 0.104.2(zod@4.4.3)
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
+
+  packages/platform:
+    dependencies:
+      '@napi-rs/canvas':
+        specifier: ^1.0.0
+        version: 1.0.0
+      '@vrover/scout-protocol':
+        specifier: workspace:*
+        version: link:../scout-protocol
+
+  packages/scout:
+    dependencies:
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:../platform
+      '@vrover/scout-protocol':
+        specifier: workspace:*
+        version: link:../scout-protocol
+
+  packages/scout-client:
+    dependencies:
+      '@vrover/scout-protocol':
+        specifier: workspace:*
+        version: link:../scout-protocol
+
+  packages/scout-protocol: {}
+
+  packages/som:
+    dependencies:
+      '@napi-rs/canvas':
+        specifier: ^1.0.0
+        version: 1.0.0
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:../platform
+
+  packages/tools:
+    dependencies:
+      '@vrover/llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:../platform
+      '@vrover/som':
+        specifier: workspace:*
+        version: link:../som
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
 packages:
 

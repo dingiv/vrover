@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { MockPlatform } from '../src/platform/mock.js';
-import { runAgent } from '../src/agent/loop.js';
-import type { CompleteFn } from '../src/llm/types.js';
+import { MockPlatform } from '@vrover/platform';
+import { runAgent } from '@vrover/agent';
+import type { CompleteFn } from '@vrover/llm';
 
 /**
  * Integration test for the agent loop. A scripted fake LLM plays the model: it emits a fixed

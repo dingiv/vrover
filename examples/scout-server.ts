@@ -7,8 +7,8 @@
  * custom TCP protocol. Each connecting client handshakes and gets its own session
  * (and its own backend terminal). Ctrl+C to stop.
  */
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { startScoutServer } from '../src/scout/server.js';
+import { MultiScreenPlatform } from '@vrover/platform';
+import { startScoutServer } from '@vrover/scout';
 
 const server = await startScoutServer({
   backendFactory: () => new MultiScreenPlatform(),

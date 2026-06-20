@@ -1,9 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { startScoutServer } from '../src/scout/server.js';
-import type { ScoutServer } from '../src/scout/server.js';
-import { MultiScreenPlatform } from '../src/platform/multi-screen.js';
-import { ScoutClient } from '../src/scout/client/index.js';
-import { centerOf } from '../src/platform/types.js';
+import { startScoutServer, type ScoutServer } from '@vrover/scout';
+import { MultiScreenPlatform, centerOf } from '@vrover/platform';
+import { ScoutClient } from '@vrover/scout-client';
 
 /**
  * Tests for the ScoutClient SDK over a real TCP server (port 0, per-session

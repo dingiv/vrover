@@ -6,9 +6,9 @@
  *   cp .env.example .env   # then put your ANTHROPIC_API_KEY in .env
  *   pnpm dev
  */
-import { MockPlatform } from '../src/platform/mock.js';
-import { runAgent } from '../src/agent/loop.js';
-import { complete as completeAnthropic } from '../src/llm/anthropic.js';
+import { MockPlatform } from '@vrover/platform';
+import { runAgent } from '@vrover/agent';
+import { complete as completeAnthropic } from '@vrover/llm';
 
 const platform = new MockPlatform();
 
