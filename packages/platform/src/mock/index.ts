@@ -1,6 +1,6 @@
 import { createCanvas, type SKRSContext2D } from '@napi-rs/canvas';
-import type { Platform, Screenshot, UiElement } from './types.js';
-import { contains } from './types.js';
+import type { Platform, Screenshot, UiElement } from '../types.js';
+import { contains } from '../types.js';
 
 /**
  * A fully in-memory {@link Platform} that renders a synthetic "login" screen with @napi-rs/canvas.
@@ -192,3 +192,7 @@ export class MockPlatform implements Platform {
     ctx.textAlign = 'left';
   }
 }
+
+// The Ubuntu-calculator mock lives in its own module; re-exported here so consumers keep
+// importing all in-memory mocks from '@vrover/platform' (via this barrel → ./mock.js).
+export { CalculatorPlatform } from './calculator.js';

@@ -1,4 +1,4 @@
-import { DesktopPlatform, MockPlatform, MultiScreenPlatform } from '@vrover/platform';
+import { CalculatorPlatform, DesktopPlatform, MockPlatform, MultiScreenPlatform } from '@vrover/platform';
 import type { Platform } from '@vrover/platform';
 import type { HandshakeRequest } from '@vrover/scout-protocol';
 
@@ -9,6 +9,7 @@ import type { HandshakeRequest } from '@vrover/scout-protocol';
  *
  * - `multi-screen` — the default, an in-memory two-screen app (login → home) rendered with
  *   @napi-rs/canvas; the "extended mock" the server drives out of the box.
+ * - `calculator` — an in-memory Ubuntu (GNOME) calculator with a real arithmetic core.
  * - `mock` — the single-screen {@link MockPlatform} (the in-process path's backend).
  * - `desktop` — the reserved Rust seam: fails fast from every method until a `NativeLayer`
  *   (napi-rs: xcap/enigo/AT-SPI) is supplied. Listed so `--backend desktop` resolves to the
@@ -25,6 +26,11 @@ export const BACKENDS: Readonly<Record<string, BackendDef>> = {
     name: 'multi-screen',
     description: 'in-memory two-screen app (login → home); default',
     create: () => new MultiScreenPlatform(),
+  },
+  calculator: {
+    name: 'calculator',
+    description: 'in-memory Ubuntu calculator (real arithmetic core)',
+    create: () => new CalculatorPlatform(),
   },
   mock: {
     name: 'mock',
