@@ -18,6 +18,14 @@ pnpm test -- test/scout-server.test.ts          # one file (pnpm forwards args t
 pnpm exec vitest run -t "handshakes a new client"  # by test name
 ```
 
+**Rust native driver layer** — a separate Cargo workspace at `crates/` (capture + input, feature-gated backends; supersedes `playground/nutjs`/`pyautogui`). It coexists with the pnpm monorepo and does **not** touch the TS side yet (napi→`NativeLayer` wiring is a future round). Toolchain is **not** preinstalled in the container — see `crates/README.md` for the one-time `rustup` + `apt` setup, then:
+```bash
+cargo build --workspace                  # core + stubs (always green, no toolchain deps in drivers)
+cargo test --workspace                   # pure-logic tests (Frame/PNG, key/Button maps, trait defaults)
+cargo build --workspace --all-features   # compile every real backend (evdev + pipewire + ashpd)
+```
+The `drivers` core crate is the only one that builds + tests without any native system libraries.
+
 Runnable entry points (all via `tsx`, so `pnpm <script>`):
 - Examples (thin demos, env-var configured): `pnpm dev`, `pnpm scout`, `pnpm scout:run`, `pnpm scout:client`.
 - Standalone apps (CLI-arg configured, see `apps/`): `pnpm scout:app`, `pnpm rover:app`, `pnpm rover:cli`. Pass args with `pnpm <script> -- <args>` (e.g. `pnpm scout:app -- --port 9000`).

@@ -57,6 +57,23 @@ agent loop（observe → think → act）
 ### Visual Scout（`@vrover/scout` + `-client` + `-protocol`）
 独立 TCP server，说一种自定义二进制协议；客户端先握手建立会话，每个会话拥有独立操作终端（一个 `Platform` = 截屏器 + 键鼠）。详见 [scout-server.md](./scout-server.md)。
 
+## 原生驱动层（Rust `crates/`）
+
+仓库根新增了一个 **Cargo workspace**（`crates/`），与 pnpm TS monorepo 并存、互不干扰。这是填 `NativeLayer` 那块预留 Rust 缝的**真正原生层**（取代 `playground/nutjs`/`pyautogui` 的 JS/Python 平替）。详见 [`crates/README.md`](../crates/README.md)。
+
+核心拆分（**截屏与键鼠分离**，两条独立 trait）：
+
+| crate | 角色 | 状态 |
+|---|---|---|
+| `vrover-drivers` | 纯 leaf:`CaptureSource` + `InputSink` trait、`Frame`/`Button`/`Key`/`DriverError` + 测试桩 | ✅ 全测（本容器） |
+| `vrover-pipewire` | `CaptureSource` via PipeWire ScreenCast(ashpd + pipewire-rs) | ✅ 编译通过（feature `pipewire`）;实时截屏需真机 |
+| `vrover-uinput` | `InputSink` via uinput 内核虚拟设备(evdev);键码映射表全测 | ✅ 编译通过(feature `backend`,Linux);实时注入需真机 |
+| `vrover-libei` | `InputSink` via libei/portal 模拟输入 | 🟡 预留脚手架(libei 未打包) |
+
+trait 与 `NativeLayer` 一一对应(`CaptureSource::capture()`+`to_png` → `captureScreen()`;`InputSink` → `perform*()`)。**下一轮**:加 napi-rs 绑定 crate,把一个 `CaptureSource` + `InputSink` 组合成 `NativeLayer` 交给 `DesktopPlatform`,TS 侧零改动即接通。grounding(AT-SPI)不进此层。
+
+> 本容器无头(那个 Wayland socket 是 VS Code 自身渲染),所以原生路径只能**编译 + 纯逻辑单测**,实时截屏/注入验证在真实 Wayland 主机做。
+
 ## 还没有 walker 的位置
 
 graph walker（按 node 动态注入高层操作 / 已知边直行）**尚未实现**：loop 里 `tools` 硬编码为 `TOOL_DEFS`，无 node / walker 概念，每步无状态地重新感知。要做 M1，loop 契约至少要长出工具注入钩子或 walker 接管 act（见 [decisions.md](./decisions.md) D8）。当前 `Walker` / `GraphMap` 是 `@vrover/scout` 里的空占位。

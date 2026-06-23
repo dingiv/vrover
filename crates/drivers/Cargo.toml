@@ -1,0 +1,13 @@
+[package]
+name = "vrover-drivers"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Cross-platform capture + input trait abstractions for VRover's native driver layer"
+
+[dependencies]
+# PNG encode of BGRA frames — pure Rust, no system deps.
+png = "0.17"
+# Ergonomic error enum — pure Rust (proc-macro).
+thiserror = "2"

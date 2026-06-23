@@ -1,0 +1,21 @@
+[package]
+name = "vrover-pipewire"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "VRover CaptureSource backend: PipeWire ScreenCast (Wayland)"
+
+[features]
+default = []
+# Build the real PipeWire + xdg-desktop-portal ScreenCast backend. Off by default:
+# needs libpipewire-0.3-dev + libclang (bindgen) and a real Wayland session to run.
+# Without it the crate builds as a documented NotBuilt stub.
+pipewire = ["dep:pipewire", "dep:ashpd", "dep:tokio", "dep:async-channel"]
+
+[dependencies]
+vrover-drivers.workspace = true
+pipewire = { version = "0.8", optional = true }
+ashpd = { version = "0.10", optional = true, default-features = false, features = ["tokio"] }
+tokio = { version = "1", optional = true, features = ["rt", "sync", "macros", "net"] }
+async-channel = { version = "2", optional = true }

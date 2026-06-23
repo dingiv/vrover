@@ -1,0 +1,37 @@
+//! `vrover-pipewire` — VRover [`CaptureSource`] backend via **PipeWire ScreenCast**
+//! (the portable Wayland screen-capture path through xdg-desktop-portal).
+//!
+//! # Default build: stub.
+//!
+//! The real backend lives behind the `pipewire` cargo feature. Without it, the
+//! crate compiles as a documented [`DriverError::NotBuilt`] stub so the workspace
+//! builds without PipeWire headers. With the feature on, [`PipeWireSource`] opens
+//! a ScreenCast session via `ashpd` and streams frames via the `pipewire` crate.
+//!
+//! # Runtime needs (cannot be satisfied in this dev container).
+//!
+//! Live capture needs a real Wayland session + a running xdg-desktop-portal — the
+//! container's `WAYLAND_DISPLAY` socket is VS Code's own rendering, not a capturable
+//! desktop. So this backend is **compile-verified here, run-verified on a real host**
+//! (see `crates/README.md`).
+
+#[cfg(not(feature = "pipewire"))]
+mod stub;
+#[cfg(feature = "pipewire")]
+mod backend;
+
+#[cfg(not(feature = "pipewire"))]
+pub use stub::{PipeWireSource, PipeWireSourceBuilder};
+#[cfg(feature = "pipewire")]
+pub use backend::{PipeWireSource, PipeWireSourceBuilder};
+
+#[cfg(test)]
+mod tests {
+    #[cfg(not(feature = "pipewire"))]
+    #[test]
+    fn stub_reports_not_built() {
+        use vrover_drivers::{CaptureSource, DriverError};
+        let mut s = super::PipeWireSource::new();
+        assert!(matches!(s.capture(), Err(DriverError::NotBuilt(_))));
+    }
+}
