@@ -50,8 +50,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh
 sh /tmp/rustup-init.sh -y --profile minimal
 source "$HOME/.cargo/env"
 
-# System libs only needed to build the pipewire backend
+# System libs. The first line is enough to *build* the pipewire backend; the
+# second line is needed to *run* it (the modules supply protocol-native +
+# adapter; the `pipewire` pkg supplies the runtime client.conf that loads them).
 sudo apt-get install -y libpipewire-0.3-dev libclang-dev clang libdbus-1-dev pkg-config
+sudo apt-get install -y libpipewire-0.3-modules pipewire
 ```
 
 ```bash
@@ -62,30 +65,39 @@ cargo build -p vrover-uinput --features backend    # just the uinput backend
 cargo build -p vrover-pipewire --features pipewire # just the pipewire backend
 ```
 
-## ⚠️ Headless-container caveat (read this)
+## Capturable desktop in this container (verified 2026-06-24)
 
-This dev container has **no capturable Wayland desktop** — its `WAYLAND_DISPLAY`
-socket is VS Code's own rendering, not a target desktop. So the live paths can be
-**compiled and unit-tested here, but not run-tested**:
-
-- `pipewire` capture needs a real graphical session + a running `xdg-desktop-portal`.
-- `uinput` injection needs `/dev/uinput` write access (root / `uinput` group) and a
-  real session to inject into.
-- `libei` is not even packaged here.
-
-### Validating on a real Wayland host
+The dev container is **not** headless: `.devcontainer/devcontainer.json` bind-mounts
+the host's `/tmp/.X11-unix` and `/run/user/1000`, so the real GNOME/Wayland desktop
+(`gnome-shell` + `Xwayland :0/:1`), the PipeWire socket (`pipewire-0`), the full
+`xdg-desktop-portal` stack (+gnome, +gtk), and `org.gnome.Mutter.ScreenCast` are all
+reachable from inside. So the **pipewire capture path is run-testable here now.**
 
 ```bash
-sudo apt-get install -y libpipewire-0.3-dev libclang-dev clang pkg-config \
-                        xdg-desktop-portal libei-dev   # if/when available
-cargo build -p vrover-pipewire --features pipewire
-# A tiny example harness (TODO) that calls PipeWireSource::new() then capture()
-# in a loop, writing PNGs. The portal will prompt to pick a screen.
+cargo run -p vrover-pipewire --example capture_one --features pipewire -- /tmp/shot.png
 ```
 
-Known gaps in `pipewire` to close on a real host (search the source for
-`TODO(host)`): explicit SPA format-POD negotiation, DMA-BUF / hardware-locked
-buffers, multi-monitor stream selection, cursor-mode / restore-token knobs.
+`capture_one` negotiates an ashpd ScreenCast session, waits for the first PipeWire
+frame, and writes it to PNG. **The portal pops a "select what to share" dialog on the
+host desktop each run** (the backend uses `PersistMode::DoNot`) — approve it (pick the
+monitor) and the PNG lands at the path you give. A verified capture produced a real
+2560×1600 RGBA PNG of the live desktop.
+
+**Runtime deps, the pitfalls hit, and a packaging checklist live in
+[`pipewire/README.md`](./pipewire/README.md)** — building this backend and running
+it are *different* dependency sets (you also need `libpipewire-0.3-modules` +
+`client.conf` to run, not just `-dev` to build).
+
+Two notes for future work:
+- **No per-run dialog:** the dialog-free route is to drive
+  `org.gnome.Mutter.ScreenCast` directly over D-Bus (`CreateSession` → `RecordMonitor`
+  → PipeWire node id), bypassing the portal — proven callable with no dialog. The
+  portal path could also be made non-interactive by switching to `PersistMode::Persistent`
+  + reusing the restore token.
+- **DMA-BUF still TODO:** Mutter handed an mmap'd (memfd) buffer here, so the current
+  decoder path works. A hardware/DMA-BUF path would need `SPA_DATA_DmaBuf` handling.
+  Multi-monitor stream selection (we take stream 0) and cursor-mode/restore-token knobs
+  on `PipeWireSourceBuilder` remain open (search `TODO(host)`).
 
 ## Relationship to the TS side (next round)
 

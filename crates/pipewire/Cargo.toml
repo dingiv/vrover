@@ -19,3 +19,9 @@ pipewire = { version = "0.8", optional = true }
 ashpd = { version = "0.10", optional = true, default-features = false, features = ["tokio"] }
 tokio = { version = "1", optional = true, features = ["rt", "sync", "macros", "net"] }
 async-channel = { version = "2", optional = true }
+
+# The capture demo needs the real (feature-gated) backend; it's skipped under
+# default features so `cargo build/test --workspace` stays green against the stub.
+[[example]]
+name = "capture_one"
+required-features = ["pipewire"]

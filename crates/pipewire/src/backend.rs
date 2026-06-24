@@ -6,11 +6,13 @@
 //! `process` callback decodes the common BGRx/BGRA mmap'd buffer into a [`Frame`]
 //! stored behind an `Arc<Mutex>`; [`PipeWireSource::capture`] hands back the latest.
 //!
-//! # Validate on a real Wayland host.
-//! This dev container has no capturable Wayland desktop (its `WAYLAND_DISPLAY`
-//! socket is VS Code's own), so this backend is **compile-verified only here**.
-//! Known gaps to close on a real host (search for `TODO(host)`):
-//! - explicit SPA format-POD negotiation (we currently rely on the portal's format);
+//! # Verified in-container (2026-06-24).
+//! The dev container mounts the host GNOME/Wayland desktop, so this runs here:
+//! an ashpd ScreenCast session → PipeWire node → mmap'd BGRx/BGRA frame → PNG,
+//! end to end (see `examples/capture_one.rs`). It needs `libpipewire-0.3-modules`
+//! (protocol-native + adapter) + the `pipewire` runtime client.conf to run, and
+//! the portal prompts to pick a screen each run (`PersistMode::DoNot`).
+//! Remaining gaps (search for `TODO(host)`):
 //! - DMA-BUF / hardware-locked buffers (only the mmap'd pointer path is handled);
 //! - multi-monitor stream selection (we take stream 0).
 //! - cursor-mode / restore-token knobs exposed via [`PipeWireSourceBuilder`].
@@ -23,7 +25,13 @@ use ashpd::desktop::screencast::{CursorMode, Screencast, SourceType};
 use ashpd::desktop::PersistMode;
 use pipewire::context::Context;
 use pipewire::properties::Properties;
-use pipewire::spa::utils::Direction;
+use pipewire::spa::param::format::{FormatProperties, MediaType, MediaSubtype};
+use pipewire::spa::param::format_utils;
+use pipewire::spa::param::video::{VideoFormat, VideoInfoRaw};
+use pipewire::spa::param::ParamType;
+use pipewire::spa::pod::serialize::PodSerializer;
+use pipewire::spa::pod::{Pod, Value};
+use pipewire::spa::utils::{Direction, Fraction, Rectangle, SpaTypes};
 use pipewire::stream::{Stream, StreamFlags};
 use pipewire::thread_loop::ThreadLoop;
 use vrover_drivers::{CaptureSource, DriverError, Frame, Result};
@@ -68,6 +76,10 @@ impl PipeWireSourceBuilder {
 struct Shared {
     frame: Option<Frame>,
     error: Option<String>,
+    /// Negotiated stream geometry, learned from the first `Format`
+    /// `param_changed`. [`decode_frame`] decodes against this (not the
+    /// portal-reported size, which may differ once the node fixates).
+    dims: Option<(u32, u32)>,
 }
 
 /// A PipeWire-backed [`CaptureSource`].
@@ -183,6 +195,7 @@ impl PipeWireSource {
         let latest = Arc::new(Mutex::new(Shared {
             frame: None,
             error: Some("PipeWire negotiation failed (no portal / not on a graphical session)".into()),
+            dims: None,
         }));
         Self {
             latest,
@@ -203,8 +216,9 @@ fn spawn_pipewire(
     latest: Arc<Mutex<Shared>>,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
-        // TODO(host): pass real negotiated dims; the portal's size may differ from
-        // the actual stream format once DMA-BUF is handled.
+        // Portal-reported geometry — used as the default in the EnumFormat size
+        // range below. The actually-negotiated size arrives via param_changed and
+        // is what decode_frame uses (see Shared::dims).
         let (w, h) = match dims {
             Some(d) => d,
             None => return fail(&latest, "portal gave no stream size"),
@@ -237,11 +251,37 @@ fn spawn_pipewire(
             Err(e) => return fail(&latest, format!("Stream::new: {e}")),
         };
 
-        let latest_cb = Arc::clone(&latest);
+        let latest_proc = Arc::clone(&latest);
+        let latest_param = Arc::clone(&latest);
         let _listener = match stream
             .add_local_listener::<()>()
+            .param_changed(move |_, _, id, param| {
+                // The node sends its fixated Format here. Parse the geometry so
+                // decode_frame knows the real width/height (the portal-reported
+                // size is only a hint).
+                let Some(param) = param else {
+                    return;
+                };
+                if id != ParamType::Format.as_raw() {
+                    return;
+                }
+                let Ok((media_type, media_subtype)) = format_utils::parse_format(param) else {
+                    return;
+                };
+                if media_type != MediaType::Video || media_subtype != MediaSubtype::Raw {
+                    return;
+                }
+                let mut info = VideoInfoRaw::new();
+                if info.parse(param).is_err() {
+                    return;
+                }
+                let size = info.size();
+                if let Ok(mut g) = latest_param.lock() {
+                    g.dims = Some((size.width, size.height));
+                }
+            })
             .process(move |s, _| {
-                decode_frame(s, w, h, &latest_cb);
+                decode_frame(s, &latest_proc);
             })
             .register()
         {
@@ -249,13 +289,66 @@ fn spawn_pipewire(
             Err(e) => return fail(&latest, format!("listener register: {e}")),
         };
 
-        // TODO(host): build a real SPA format POD (VideoFormat::BGRx/BGRA + size)
-        // instead of relying on AUTOCONNECT + the portal-supplied format.
+        // Build a real SPA EnumFormat POD: offer BGRx/BGRA raw video over a size
+        // range (defaulting to the portal-reported geometry), any framerate. The
+        // node fixates this; the chosen size arrives via `param_changed` above.
+        let obj = pipewire::spa::pod::object!(
+            SpaTypes::ObjectParamFormat,
+            ParamType::EnumFormat,
+            pipewire::spa::pod::property!(
+                FormatProperties::MediaType,
+                Id,
+                MediaType::Video
+            ),
+            pipewire::spa::pod::property!(
+                FormatProperties::MediaSubtype,
+                Id,
+                MediaSubtype::Raw
+            ),
+            pipewire::spa::pod::property!(
+                FormatProperties::VideoFormat,
+                Choice,
+                Enum,
+                Id,
+                VideoFormat::BGRx,
+                VideoFormat::BGRx,
+                VideoFormat::BGRA
+            ),
+            pipewire::spa::pod::property!(
+                FormatProperties::VideoSize,
+                Choice,
+                Range,
+                Rectangle,
+                Rectangle { width: w, height: h },
+                Rectangle { width: 1, height: 1 },
+                Rectangle { width: 4096, height: 4096 }
+            ),
+            pipewire::spa::pod::property!(
+                FormatProperties::VideoFramerate,
+                Choice,
+                Range,
+                Fraction,
+                Fraction { num: 0, denom: 1 },
+                Fraction { num: 0, denom: 1 },
+                Fraction { num: 1000, denom: 1 }
+            ),
+        );
+        let values: Vec<u8> = match PodSerializer::serialize(
+            std::io::Cursor::new(Vec::new()),
+            &Value::Object(obj),
+        ) {
+            Ok((cursor, _len)) => cursor.into_inner(),
+            Err(e) => return fail(&latest, format!("format pod serialize: {e}")),
+        };
+        let Some(format_pod) = Pod::from_bytes(&values) else {
+            return fail(&latest, "format pod from_bytes failed");
+        };
+        let mut params = [format_pod];
         if let Err(e) = stream.connect(
             Direction::Input,
             Some(node_id),
             StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS,
-            &mut [],
+            &mut params,
         ) {
             return fail(&latest, format!("stream.connect: {e}"));
         }
@@ -270,7 +363,13 @@ fn spawn_pipewire(
 
 /// Decode the first data plane of the dequeued buffer as BGRx/BGRA → BGRA [`Frame`].
 /// Only the mmap'd pointer path (`SPA_DATA_MemPtr`) is handled; DMA-BUF is TODO(host).
-fn decode_frame(stream: &pipewire::stream::StreamRef, w: u32, h: u32, latest: &Arc<Mutex<Shared>>) {
+fn decode_frame(stream: &pipewire::stream::StreamRef, latest: &Arc<Mutex<Shared>>) {
+    // Decode against the negotiated geometry (set by param_changed). If it
+    // hasn't arrived yet, skip this cycle.
+    let (w, h) = match latest.lock().ok().and_then(|g| g.dims) {
+        Some(d) => d,
+        None => return,
+    };
     let Some(mut buf) = stream.dequeue_buffer() else {
         return;
     };
