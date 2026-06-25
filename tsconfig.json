@@ -3,6 +3,15 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["packages/*/src", "apps/*/src", "examples", "test"],
-  "exclude": ["node_modules", "packages/*/dist", "apps/visual_scout_devtools"]
+  "include": [
+    "packages/*/src",
+    "apps/*/src",
+    "examples",
+    "test"
+  ],
+  "exclude": [
+    "node_modules",
+    "packages/*/dist",
+    "apps/visual_scout_devtools"
+  ]
 }

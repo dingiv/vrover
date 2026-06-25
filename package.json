@@ -9,6 +9,8 @@
     "scout": "tsx examples/scout-server.ts",
     "scout:run": "tsx examples/scout-run.ts",
     "scout:client": "tsx examples/scout-client.ts",
+    "glm:vlm": "tsx examples/glm-vlm.ts",
+    "glm:agent": "tsx examples/glm-agent.ts",
     "scout:app": "tsx apps/visual_scout/src/main.ts",
     "rover:app": "tsx apps/visual_rover/src/main.ts",
     "rover:cli": "tsx apps/visual_rover/src/main.ts --mode cli",
@@ -43,6 +45,7 @@
     "@vrover/agent": "workspace:*",
     "@vrover/llm": "workspace:*",
     "@vrover/platform": "workspace:*",
+    "@vrover/providers": "workspace:*",
     "@vrover/scout": "workspace:*",
     "@vrover/scout-client": "workspace:*",
     "@vrover/scout-protocol": "workspace:*",
@@ -52,6 +55,7 @@
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.0",
     "@types/node": "^25.9.3",
+    "dotenv": "^17.4.2",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"

@@ -216,6 +216,9 @@ importers:
       '@vrover/platform':
         specifier: workspace:*
         version: link:packages/platform
+      '@vrover/providers':
+        specifier: workspace:*
+        version: link:packages/providers
       '@vrover/scout':
         specifier: workspace:*
         version: link:packages/scout
@@ -238,6 +241,9 @@ importers:
       '@types/node':
         specifier: ^25.9.3
         version: 25.9.3
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       tsx:
         specifier: ^4.22.4
         version: 4.22.4
@@ -333,6 +339,12 @@ importers:
       '@vrover/scout-protocol':
         specifier: workspace:*
         version: link:../scout-protocol
+
+  packages/providers:
+    dependencies:
+      '@vrover/llm':
+        specifier: workspace:*
+        version: link:../llm
 
   packages/scout:
     dependencies:

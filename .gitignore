@@ -5,3 +5,4 @@ playground
 
 # Rust
 target/
+.env.local*
