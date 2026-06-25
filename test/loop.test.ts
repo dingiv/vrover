@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MockPlatform } from '@vrover/platform';
-import { runAgent } from '@vrover/agent';
+import { runAgent, type DispatchFn } from '@vrover/agent';
 import type { CompleteFn } from '@vrover/llm';
 
 /**
@@ -73,5 +73,35 @@ describe('runAgent loop', () => {
     });
     expect(result.status).toBe('error');
     expect(result.error).toBe('boom');
+  });
+
+  it('uses injected tools + dispatch instead of the defaults (D8)', async () => {
+    const platform = new MockPlatform();
+    const seenTools: string[][] = [];
+    const dispatchCalls: string[] = [];
+    const complete: CompleteFn = async (req) => {
+      seenTools.push(req.tools.map((t) => t.name));
+      return {
+        text: null,
+        toolUses: [{ id: 'tu_1', name: 'ping', input: {} }],
+        raw: [{ type: 'tool_use', id: 'tu_1', name: 'ping', input: {} }],
+        stopReason: 'tool_use',
+      };
+    };
+    const dispatch: DispatchFn = async (name) => {
+      dispatchCalls.push(name);
+      return { message: `pong:${name}`, finished: false };
+    };
+    const result = await runAgent({
+      platform,
+      complete,
+      task: 'x',
+      maxSteps: 1,
+      tools: [{ name: 'ping', description: 'd', input_schema: { type: 'object', properties: {} } }],
+      dispatch,
+    });
+    expect(seenTools[0]).toEqual(['ping']); // custom tools reached the model
+    expect(dispatchCalls).toEqual(['ping']); // custom dispatch ran, not the default
+    expect(result.status).toBe('max_steps'); // never called done within 1 step
   });
 });

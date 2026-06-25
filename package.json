@@ -11,6 +11,7 @@
     "scout:client": "tsx examples/scout-client.ts",
     "glm:vlm": "tsx examples/glm-vlm.ts",
     "glm:agent": "tsx examples/glm-agent.ts",
+    "oneshot": "tsx examples/oneshot-loop.ts",
     "scout:app": "tsx apps/visual_scout/src/main.ts",
     "rover:app": "tsx apps/visual_rover/src/main.ts",
     "rover:cli": "tsx apps/visual_rover/src/main.ts --mode cli",
