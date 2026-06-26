@@ -68,7 +68,7 @@ function main(): void {
     process.exit(2);
   }
 
-  const platform = (values.platform ?? 'remote') as 'mock' | 'remote' | 'desktop';
+  const platform = (values.platform ?? 'mock') as 'mock' | 'remote' | 'desktop';
   if (!['mock', 'remote', 'desktop'].includes(platform)) {
     console.error(`Invalid --platform "${platform}". Use 'mock', 'remote', or 'desktop'.`);
     process.exit(2);

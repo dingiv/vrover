@@ -36,3 +36,7 @@ pub use error::{DriverError, Result};
 pub use frame::Frame;
 pub use input::InputSink;
 pub use mock::{MockCaptureSource, RecordedEvent, RecordingInputSink};
+
+// Feature-gated backend re-exports (convenience for the napi binding crate).
+#[cfg(feature = "uinput")]
+pub use backends::uinput::{UinputSink, UinputSinkBuilder};

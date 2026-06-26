@@ -2702,6 +2702,7 @@ dependencies = [
  "napi",
  "napi-build",
  "napi-derive",
+ "vrover-drivers",
  "vrover-omniparser",
 ]
 

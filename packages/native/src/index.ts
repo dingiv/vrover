@@ -22,14 +22,18 @@ function loadBinding(): {
     boxThreshold: number;
     iouThreshold: number;
   }) => NativeParser;
+  DesktopNativeLayer: new (
+    screenWidth: number | null,
+    screenHeight: number | null,
+  ) => DesktopNativeLayer;
 } {
   const { platform, arch } = process;
   if (platform === 'linux' && arch === 'x64') {
-    return require('./vrover-native.linux-x64-gnu.node');
+    return require('../vrover-native.linux-x64-gnu.node');
   }
   throw new Error(
     `@vrover/native: unsupported platform ${platform}-${arch}. ` +
-      `Build the native binding with: cd crates/native && napi build --platform --release -o ../../packages/native/`,
+      `Build the native binding with: pnpm build:native`,
   );
 }
 
@@ -56,6 +60,35 @@ export function createParser(config: NativeConfig): NativeParser {
     boxThreshold: config.boxThreshold ?? 0.05,
     iouThreshold: config.iouThreshold ?? 0.1,
   });
+}
+
+// ── desktop layer ───────────────────────────────────────────────────────────
+
+/**
+ * Create a native input layer via Linux uinput.
+ *
+ * Requires `/dev/uinput` write access at runtime (root or `uinput` group).
+ * Pass `screenWidth`/`screenHeight` for accurate absolute-pointer scaling.
+ */
+export function createDesktopLayer(opts?: {
+  screenWidth?: number;
+  screenHeight?: number;
+}): DesktopNativeLayer {
+  return new (binding().DesktopNativeLayer)(
+    opts?.screenWidth ?? null,
+    opts?.screenHeight ?? null,
+  );
+}
+
+/** uinput-backed mouse + keyboard injection. */
+export interface DesktopNativeLayer {
+  moveTo(x: number, y: number): void;
+  click(x: number, y: number, button: string): void;
+  scroll(x: number, y: number, dx: number, dy: number): void;
+  typeText(text: string): void;
+  keyPress(key: string): void;
+  keyRelease(key: string): void;
+  tapKey(key: string): void;
 }
 
 // ── conversion ──────────────────────────────────────────────────────────────

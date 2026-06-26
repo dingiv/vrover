@@ -5,10 +5,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "mock": "tsx apps/visual_rover/src/main.ts --mode cli --platform mock --task 'log in'",
     "scout": "tsx examples/scout-server.ts",
     "scout:app": "tsx apps/visual_scout/src/main.ts",
-    "rover:cli": "tsx apps/visual_rover/src/main.ts --mode cli",
+    "rover:cli": "tsx apps/visual_rover/src/main.ts --mode cli --platform mock",
+    "rover:desktop": "tsx apps/visual_rover/src/main.ts --mode cli --platform desktop",
     "rover:app": "tsx apps/visual_rover/src/main.ts",
     "devtools": "pnpm --filter @vrover/visual-scout-devtools dev",
     "devtools:build": "pnpm --filter @vrover/visual-scout-devtools build",

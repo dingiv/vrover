@@ -50,8 +50,9 @@ export async function runCli(opts: CliOptions): Promise<void> {
   // 2. pick the platform
   const platform = pickPlatform(opts.platform, cfg);
 
-  // 3. optionally wire the native OmniParser
-  const nativeParser = pickNativeParser(cfg.agent.yoloPath);
+  // 3. optionally wire the native OmniParser (desktop or explicit --yolo-path)
+  const wantNative = opts.platform === 'desktop' || !!opts.overrides?.agent?.yoloPath;
+  const nativeParser = wantNative ? pickNativeParser(cfg.agent.yoloPath) : undefined;
 
   // 4. run the agent loop
   let result: TaskResult;
@@ -118,7 +119,8 @@ function pickNativeParser(yoloPath?: string): NativeParser | undefined {
   try {
     return createParser({ yoloPath });
   } catch (err) {
-    console.error(`Native OmniParser not available: ${errMsg(err)}`);
+    console.error(`Native OmniParser not available: build it with \`pnpm build:native\``);
+    console.error(`  Also verify the model exists at ${yoloPath}`);
     return undefined;
   }
 }

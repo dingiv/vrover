@@ -16,8 +16,12 @@ export function createGlm(opts: Partial<OpenAICompatibleOptions> = {}): Complete
     apiKey: process.env.GLM_API_KEY ?? '',
     model: process.env.GLM_VISION_MODEL ?? GLM_DEFAULT_MODEL,
     ...opts,
+  };
+  if (!opt.apiKey) {
+    throw new Error(
+      'GLM_API_KEY is not set. Add it to vrover.conf (llm.glm.apiKey) or set the GLM_API_KEY env var.',
+    );
   }
-  console.log(opt)
   return createOpenAICompatible(opt);
 }
 

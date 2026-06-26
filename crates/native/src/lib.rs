@@ -1,8 +1,7 @@
-//! napi-rs bindings for `vrover-omniparser`.
+//! napi-rs bindings for VRover's native driver layer.
 //!
-//! Exposes [`OmniParserNative`] — a JS class that wraps the Rust `OmniParser`.
-//! One `parse(pngBuffer)` call does detection + SoM annotation in a single pass,
-//! returning the annotated PNG and element list.
+//! - [`OmniParserNative`] — YOLO icon detection + SoM annotation (wraps `vrover-omniparser`).
+//! - [`DesktopNativeLayer`] — mouse + keyboard input via Linux uinput (wraps `vrover-drivers`).
 
 use std::cell::RefCell;
 
@@ -129,5 +128,150 @@ impl OmniParserNative {
             width: w,
             height: h,
         })
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DesktopNativeLayer — uinput mouse + keyboard injection
+// ══════════════════════════════════════════════════════════════════════════════
+
+use vrover_drivers::{Button, InputSink, Key, UinputSink};
+
+/// Mouse + keyboard input via Linux uinput (`/dev/uinput`).
+///
+/// Screen size is optional — when set, absolute pointer coords are scaled
+/// correctly.  Requires write access to `/dev/uinput` (root or `uinput` group).
+#[napi]
+pub struct DesktopNativeLayer {
+    sink: RefCell<UinputSink>,
+}
+
+#[napi]
+impl DesktopNativeLayer {
+    /// Open the uinput virtual device. Pass `(width, height)` for accurate
+    /// pointer scaling; omit to use raw device-space coords.
+    ///
+    /// Requires `/dev/uinput` write access (root or `uinput` group) at runtime.
+    #[napi(constructor)]
+    pub fn new(screen_width: Option<u32>, screen_height: Option<u32>) -> Result<Self> {
+        let sink = match (screen_width, screen_height) {
+            (Some(w), Some(h)) => UinputSink::with_screen(w, h)
+                .map_err(|e| napi::Error::from_reason(format!("uinput open failed: {e}")))?,
+            _ => UinputSink::new()
+                .map_err(|e| napi::Error::from_reason(format!("uinput open failed: {e}")))?,
+        };
+        Ok(Self { sink: RefCell::new(sink) })
+    }
+
+    #[napi]
+    pub fn move_to(&self, x: i32, y: i32) -> Result<()> {
+        self.sink.borrow_mut().move_to(x, y)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+
+    #[napi]
+    pub fn click(&self, x: i32, y: i32, button: String) -> Result<()> {
+        let btn = parse_button(&button)?;
+        self.sink.borrow_mut().click(x, y, btn)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+
+    #[napi]
+    pub fn scroll(&self, x: i32, y: i32, dx: i32, dy: i32) -> Result<()> {
+        self.sink.borrow_mut().scroll(x, y, dx, dy)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+
+    #[napi]
+    pub fn type_text(&self, text: String) -> Result<()> {
+        self.sink.borrow_mut().type_text(&text)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+
+    #[napi]
+    pub fn key_press(&self, key: String) -> Result<()> {
+        let k = parse_key(&key)?;
+        self.sink.borrow_mut().key_press(k)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+
+    #[napi]
+    pub fn key_release(&self, key: String) -> Result<()> {
+        let k = parse_key(&key)?;
+        self.sink.borrow_mut().key_release(k)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+
+    #[napi]
+    pub fn tap_key(&self, key: String) -> Result<()> {
+        let k = parse_key(&key)?;
+        self.sink.borrow_mut().tap_key(k)
+            .map_err(|e| napi::Error::from_reason(format!("uinput: {e}")))
+    }
+}
+
+// ── key / button parsing ────────────────────────────────────────────────────
+
+fn parse_button(s: &str) -> Result<Button> {
+    match s {
+        "left" => Ok(Button::Left),
+        "right" => Ok(Button::Right),
+        "middle" => Ok(Button::Middle),
+        other => {
+            let n: u8 = other.parse().map_err(|_| {
+                napi::Error::from_reason(format!("unknown button {other:?} — use left/right/middle"))
+            })?;
+            Ok(Button::Other(n))
+        }
+    }
+}
+
+fn parse_key(s: &str) -> Result<Key> {
+    match s {
+        "enter" | "Enter" => Ok(Key::Enter),
+        "backspace" | "Backspace" => Ok(Key::Backspace),
+        "tab" | "Tab" => Ok(Key::Tab),
+        "escape" | "Escape" | "esc" => Ok(Key::Escape),
+        "space" | "Space" => Ok(Key::Space),
+        "delete" | "Delete" | "del" => Ok(Key::Delete),
+        "insert" | "Insert" | "ins" => Ok(Key::Insert),
+        "left" | "Left" => Ok(Key::Left),
+        "right" | "Right" => Ok(Key::Right),
+        "up" | "Up" => Ok(Key::Up),
+        "down" | "Down" => Ok(Key::Down),
+        "home" | "Home" => Ok(Key::Home),
+        "end" | "End" => Ok(Key::End),
+        "pageup" | "PageUp" => Ok(Key::PageUp),
+        "pagedown" | "PageDown" => Ok(Key::PageDown),
+        "leftshift" | "LeftShift" => Ok(Key::LeftShift),
+        "rightshift" | "RightShift" => Ok(Key::RightShift),
+        "leftcontrol" | "LeftControl" | "ctrl" => Ok(Key::LeftControl),
+        "rightcontrol" | "RightControl" => Ok(Key::RightControl),
+        "leftalt" | "LeftAlt" | "alt" => Ok(Key::LeftAlt),
+        "rightalt" | "RightAlt" => Ok(Key::RightAlt),
+        "leftsuper" | "LeftSuper" | "super" | "win" => Ok(Key::LeftSuper),
+        "rightsuper" | "RightSuper" => Ok(Key::RightSuper),
+        other => {
+            // F1..F12
+            if let Some(n) = other
+                .strip_prefix('f')
+                .or_else(|| other.strip_prefix('F'))
+                .and_then(|n| n.parse::<u8>().ok())
+            {
+                if (1..=12).contains(&n) {
+                    return Ok(Key::F(n));
+                }
+            }
+            // Single char
+            let mut chars = other.chars();
+            if let Some(c) = chars.next() {
+                if chars.next().is_none() {
+                    return Ok(Key::Char(c));
+                }
+            }
+            Err(napi::Error::from_reason(format!(
+                "unknown key {other:?} — use names like enter/backspace/tab/escape/F1/a"
+            )))
+        }
     }
 }
