@@ -8,45 +8,54 @@
  * `ANTHROPIC_API_KEY`, but the server boots key-free (the key is only checked when a task
  * runs).
  *
- *   pnpm rover:app                                       # serve (web UI + agent service) on :8080
- *   pnpm rover:app -- --mode cli --task "log in"         # one-shot CLI run, then exit
- *   pnpm rover:app -- --scout-port 9000 --web-port 8080  # point at a scout on 9000
+ *   pnpm rover:app                                                  # serve on :8080
+ *   pnpm rover:app -- --mode cli --task "log in"                    # one-shot CLI, remote scout
+ *   pnpm rover:app -- --mode cli --platform mock --task "click me"  # in-memory mock, no deps
+ *   pnpm rover:app -- --mode cli --platform mock --provider glm     # pick provider
+ *   pnpm rover:app -- --scout-port 9000 --web-port 8080             # custom ports
  *
- * Scout host/port default to `SCOUT_HOST`/`SCOUT_PORT` (then `127.0.0.1` / `7878`).
+ * Config: reads from `vrover.conf` (CWD → ~/.vrover → /etc) + env vars.
+ * The `--provider`, `--scout-host`, `--scout-port` flags override config/env.
  */
 import { parseArgs } from 'node:util';
 import { runCli } from './cli.js';
 import { startWebServer } from './web.js';
 
 const USAGE = `\
-visual-rover — VRover GUI agent (brain) server
+visual-rover — VRover GUI agent (brain)
 
 Usage:
   visual-rover [options]
 
 Modes (default: serve):
-  --mode cli     Run a single task (--task or stdin), print the result, exit.
+  --mode cli     Run a single task, print the result, exit.
   --mode serve   Start the HTTP agent service + web UI and keep running.
 
 Options:
-  --scout-host <host>   Visual Scout host (default: $SCOUT_HOST or 127.0.0.1)
-  --scout-port <port>   Visual Scout port (default: $SCOUT_PORT or 7878)
-  --task <text>         Task text (cli mode; otherwise read from stdin/prompt)
-  --max-steps <n>       Max agent steps (default: 15)
+  --platform <p>        mock | remote | desktop (default: remote)
+  --scout-host <host>   Scout server host (default: 127.0.0.1 / $SCOUT_HOST)
+  --scout-port <port>   Scout server port (default: 7878 / $SCOUT_PORT)
+  --provider <p>        anthropic | glm | openai | vllm | custom (default: from config)
+  --task <text>         Task text (cli mode; otherwise prompt / stdin)
+  --max-steps <n>       Max agent steps (default: from config, 15)
+  --yolo-path <path>    icon_detect.onnx path for native OmniParser (desktop mode)
   --web-host <host>     Web server host (serve mode; default 127.0.0.1)
-  --web-port <port>     Web server port (serve mode; default 8080; 0 = OS-assigned)
+  --web-port <port>     Web server port (serve mode; default 8080)
   -h, --help            Show this help and exit
 
-The real LLM path needs ANTHROPIC_API_KEY; the server boots without it.`;
+Config: vrover.conf (CWD → ~/.vrover → /etc) + env vars.  See .env.example.`;
 
 function main(): void {
   const { values } = parseArgs({
     options: {
       mode: { type: 'string' },
+      platform: { type: 'string' },
       'scout-host': { type: 'string' },
       'scout-port': { type: 'string' },
+      provider: { type: 'string' },
       task: { type: 'string' },
       'max-steps': { type: 'string' },
+      'yolo-path': { type: 'string' },
       'web-host': { type: 'string' },
       'web-port': { type: 'string' },
       help: { type: 'boolean', short: 'h' },
@@ -69,9 +78,23 @@ function main(): void {
   const scoutHost = values['scout-host'] ?? process.env.SCOUT_HOST ?? '127.0.0.1';
   const scoutPort = parsePort(values['scout-port'] ?? process.env.SCOUT_PORT ?? '7878', '--scout-port');
   const maxSteps = values['max-steps'] === undefined ? undefined : parseUint(values['max-steps'], '--max-steps');
+  const provider = values.provider;
+  const platform = (values.platform ?? 'remote') as 'mock' | 'remote' | 'desktop';
+  if (!['mock', 'remote', 'desktop'].includes(platform)) {
+    console.error(`Invalid --platform "${platform}". Use 'mock', 'remote', or 'desktop'.`);
+    process.exit(2);
+  }
 
   if (mode === 'cli') {
-    void runCli({ scoutHost, scoutPort, task: values.task, maxSteps });
+    void runCli({
+      platform,
+      scoutHost,
+      scoutPort,
+      provider,
+      task: values.task,
+      maxSteps,
+      yoloPath: values['yolo-path'],
+    });
     return;
   }
 

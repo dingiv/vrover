@@ -262,9 +262,21 @@ importers:
       '@vrover/agent':
         specifier: workspace:*
         version: link:../../packages/agent
+      '@vrover/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@vrover/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@vrover/native':
+        specifier: workspace:*
+        version: link:../../packages/native
+      '@vrover/platform':
+        specifier: workspace:*
+        version: link:../../packages/platform
+      '@vrover/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
     devDependencies:
       tsx:
         specifier: ^4.22.4

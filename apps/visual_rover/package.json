@@ -14,7 +14,11 @@
   },
   "dependencies": {
     "@vrover/agent": "workspace:*",
-    "@vrover/llm": "workspace:*"
+    "@vrover/config": "workspace:*",
+    "@vrover/llm": "workspace:*",
+    "@vrover/native": "workspace:*",
+    "@vrover/platform": "workspace:*",
+    "@vrover/providers": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.22.4"
