@@ -9,12 +9,15 @@
 //! un-letterbox boxes back to source pixel coords.
 
 use std::path::Path;
+use std::time::Instant;
 
-use image::{imageops, RgbImage};
+use image::RgbImage;
+use fast_image_resize as fr;
 use ndarray::Array4;
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Tensor;
 
+use crate::device::Device;
 use crate::error::{ort_err, Result};
 use crate::overlap;
 use crate::types::BBox;
@@ -39,15 +42,27 @@ pub struct YoloDetector {
 }
 
 impl YoloDetector {
-    /// Load the ONNX model from `path`. Defaults: `box_threshold=0.05`,
-    /// `iou_threshold=0.1` (matching `omniparserserver` / `get_som_labeled_img`).
-    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
-        let session = Session::builder()
+    /// Load the ONNX model from `path`, running on `device`, optionally pinning
+    /// intra-op threads (`None` = ort default; pass `Some(1)` per worker when
+    /// running a parallel pool to avoid oversubscription). Defaults:
+    /// `box_threshold=0.05`, `iou_threshold=0.1`.
+    pub fn new(
+        path: impl AsRef<Path>,
+        device: Device,
+        intra_threads: Option<usize>,
+    ) -> Result<Self> {
+        let mut builder = Session::builder()
             .map_err(ort_err)?
             .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(ort_err)?
-            .commit_from_file(path.as_ref())
             .map_err(ort_err)?;
+        let providers = device.providers();
+        if !providers.is_empty() {
+            builder = builder.with_execution_providers(providers).map_err(ort_err)?;
+        }
+        if let Some(n) = intra_threads {
+            builder = builder.with_intra_threads(n).map_err(ort_err)?;
+        }
+        let session = builder.commit_from_file(path.as_ref()).map_err(ort_err)?;
         Ok(Self {
             session,
             box_threshold: 0.05,
@@ -64,9 +79,12 @@ impl YoloDetector {
 
     /// Detect icons. Boxes are in source-image pixel coords.
     pub fn detect(&mut self, rgb: &RgbImage) -> Result<Vec<Detection>> {
+        let on = crate::timing();
         let (iw, ih) = (rgb.width(), rgb.height());
         let (ratio, new_w, new_h, dw, dh) = letterbox(iw, ih, IMGSZ);
+        let t0 = Instant::now();
         let input = preprocess(rgb, new_w, new_h, dw, dh)?;
+        let t1 = Instant::now();
         let tensor = Tensor::from_array(input).map_err(ort_err)?;
         let outputs = self
             .session
@@ -75,6 +93,7 @@ impl YoloDetector {
         let (_shape, data) = outputs["output0"]
             .try_extract_tensor::<f32>()
             .map_err(ort_err)?;
+        let t2 = Instant::now();
 
         // Layout [1, 5, 8400]: element (0, c, j) = data[c*8400 + j].
         let n = 8400usize;
@@ -118,6 +137,15 @@ impl YoloDetector {
                 kept.push(Detection { bbox: b, conf: c });
             }
         }
+        let t3 = Instant::now();
+        if on {
+            eprintln!(
+                "    [timing]   preprocess {:7.2}ms | infer {:7.2}ms | post {:6.2}ms",
+                t1.duration_since(t0).as_secs_f64() * 1000.0,
+                t2.duration_since(t1).as_secs_f64() * 1000.0,
+                t3.duration_since(t2).as_secs_f64() * 1000.0,
+            );
+        }
         Ok(kept)
     }
 }
@@ -135,17 +163,63 @@ fn letterbox(iw: u32, ih: u32, target: u32) -> (f32, u32, u32, u32, u32) {
 
 /// Resize to `new_w×new_h`, place at integer offset `(dw,dh)` on a `target²` gray
 /// canvas, and lay out as NCHW `[1,3,target,target]` f32, RGB, /255.
+/// Letterbox + tensorize: SIMD-resize to `new_w×new_h`, place at offset `(dw,dh)`
+/// on a gray `IMGSZ²` canvas, lay out as NCHW `[1,3,H,W]` f32 RGB normalized.
+///
+/// TODO(tier2): fold resize+pad+transpose+normalize into the ONNX graph so the
+/// CUDA EP runs the whole preproc on-GPU (see `PERF.md`). Currently CPU, but
+/// SIMD-resized + scalar-tight (Tier 1).
 fn preprocess(rgb: &RgbImage, new_w: u32, new_h: u32, dw: u32, dh: u32) -> Result<Array4<f32>> {
-    let resized = imageops::resize(rgb, new_w, new_h, imageops::FilterType::Triangle);
-    let mut arr = Array4::from_elem((1, 3, IMGSZ as usize, IMGSZ as usize), PAD_GRAY);
-    for y in 0..new_h {
-        for x in 0..new_w {
-            let p = resized.get_pixel(x, y);
-            let (yy, xx) = (y as usize + dh as usize, x as usize + dw as usize);
-            arr[[0, 0, yy, xx]] = p.0[0] as f32 / 255.0;
-            arr[[0, 1, yy, xx]] = p.0[1] as f32 / 255.0;
-            arr[[0, 2, yy, xx]] = p.0[2] as f32 / 255.0;
+    let on = crate::timing();
+    let t0 = Instant::now();
+
+    // SIMD resize (fast_image_resize) — much faster than `image`'s scalar Triangle.
+    let src = fr::images::Image::from_vec_u8(
+        rgb.width(),
+        rgb.height(),
+        rgb.as_raw().clone(),
+        fr::PixelType::U8x3,
+    )
+    .map_err(|e| crate::error::OmniError::Model(format!("resize src: {e}")))?;
+    let mut dst = fr::images::Image::new(new_w, new_h, fr::PixelType::U8x3);
+    // Default is Lanczos3 (heavy); Bilinear ≈ the Triangle we used before, but SIMD.
+    let opts = fr::ResizeOptions::new()
+        .resize_alg(fr::ResizeAlg::Convolution(fr::FilterType::Bilinear));
+    let mut resizer = fr::Resizer::new();
+    resizer
+        .resize(&src, &mut dst, Some(&opts))
+        .map_err(|e| crate::error::OmniError::Model(format!("resize: {e}")))?;
+    let resized = dst.buffer();
+    let t1 = Instant::now();
+
+    // Place into the padded NCHW f32 tensor straight from the raw HWC bytes. Build
+    // a flat C-contiguous [1,3,H,W] buffer with direct indexing — ndarray's
+    // `[[...]]` indexer adds per-access overhead across ~700k writes.
+    const INV255: f32 = 1.0 / 255.0;
+    let (w, h) = (IMGSZ as usize, IMGSZ as usize);
+    let plane = h * w;
+    let mut buf = vec![PAD_GRAY; 3 * plane];
+    let stride = new_w as usize * 3;
+    for y in 0..new_h as usize {
+        let row = (y + dh as usize) * w;
+        let base = y * stride;
+        for x in 0..new_w as usize {
+            let o = base + x * 3;
+            let pi = row + x + dw as usize;
+            buf[pi] = resized[o] as f32 * INV255;
+            buf[plane + pi] = resized[o + 1] as f32 * INV255;
+            buf[2 * plane + pi] = resized[o + 2] as f32 * INV255;
         }
+    }
+    let arr = Array4::from_shape_vec((1, 3, h, w), buf)
+        .map_err(|e| crate::error::OmniError::Model(format!("nchw: {e}")))?;
+    let t2 = Instant::now();
+    if on {
+        eprintln!(
+            "    [timing]     resize {:7.2}ms | to_nchw {:6.2}ms",
+            t1.duration_since(t0).as_secs_f64() * 1000.0,
+            t2.duration_since(t1).as_secs_f64() * 1000.0,
+        );
     }
     Ok(arr)
 }
