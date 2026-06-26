@@ -63,12 +63,14 @@ agent loop（observe → think → act）
 
 核心拆分（**截屏与键鼠分离**，两条独立 trait）：
 
-| crate | 角色 | 状态 |
+只有一个 crate `vrover-drivers`：截屏/键鼠是它内部两条独立 trait，三个平台后端是 feature-gated 模块（默认关，所以无原生依赖也能全测）。pipewire/uinput/libei 原本是三个独立 crate，现已合并进来。
+
+| 模块 (feature) | 角色 | 状态 |
 |---|---|---|
-| `vrover-drivers` | 纯 leaf:`CaptureSource` + `InputSink` trait、`Frame`/`Button`/`Key`/`DriverError` + 测试桩 | ✅ 全测（本容器） |
-| `vrover-pipewire` | `CaptureSource` via PipeWire ScreenCast(ashpd + pipewire-rs) | ✅ 编译通过（feature `pipewire`）;实时截屏需真机 |
-| `vrover-uinput` | `InputSink` via uinput 内核虚拟设备(evdev);键码映射表全测 | ✅ 编译通过(feature `backend`,Linux);实时注入需真机 |
-| `vrover-libei` | `InputSink` via libei/portal 模拟输入 | 🟡 预留脚手架(libei 未打包) |
+| `drivers` 核心 | `CaptureSource` + `InputSink` trait、`Frame`/`Button`/`Key`/`DriverError` + 测试桩 | ✅ 全测（本容器） |
+| `backends::pipewire` (`pipewire`) | `CaptureSource` via PipeWire ScreenCast(ashpd + pipewire-rs) | ✅ 编译通过;实时截屏需真机 |
+| `backends::uinput` (`uinput`) | `InputSink` via uinput 内核虚拟设备(evdev);键码映射表全测 | ✅ 编译通过(Linux);实时注入需真机 |
+| `backends::libei` (`libei`) | `InputSink` via libei/portal 模拟输入 | 🟡 预留脚手架(libei 未打包) |
 
 trait 与 `NativeLayer` 一一对应(`CaptureSource::capture()`+`to_png` → `captureScreen()`;`InputSink` → `perform*()`)。**下一轮**:加 napi-rs 绑定 crate,把一个 `CaptureSource` + `InputSink` 组合成 `NativeLayer` 交给 `DesktopPlatform`,TS 侧零改动即接通。grounding(AT-SPI)不进此层。
 

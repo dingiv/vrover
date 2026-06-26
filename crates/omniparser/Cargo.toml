@@ -1,0 +1,21 @@
+[package]
+name = "vrover-omniparser"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Rust port of OmniParser: YOLO icon detection + Set-of-Mark annotation (CPU via ONNX Runtime)"
+
+[dependencies]
+# ONNX Runtime — the `download` feature fetches a prebuilt CPU lib at build time.
+# GPU (CUDA, Blackwell/sm_120) is a future addition (ort `cuda` feature + a
+# matching onnxruntime-gpu); correctness-on-CPU comes first.
+ort = { version = "=2.0.0-rc.12", features = ["download-binaries", "ndarray"] }
+ndarray = "0.17"
+image = "0.25"
+imageproc = "0.25"
+ab_glyph = "0.2"
+thiserror = "2"
+
+[[example]]
+name = "parse_one"

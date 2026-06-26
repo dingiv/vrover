@@ -24,7 +24,7 @@ cargo build --workspace                  # core + stubs (always green, no toolch
 cargo test --workspace                   # pure-logic tests (Frame/PNG, key/Button maps, trait defaults)
 cargo build --workspace --all-features   # compile every real backend (evdev + pipewire + ashpd)
 ```
-The `drivers` core crate is the only one that builds + tests without any native system libraries.
+The `drivers` crate builds + tests with no native system libraries under default features; the PipeWire/uinput/libei backends are feature-gated modules within it (merged from three former standalone crates — `vrover-pipewire`/`-uinput`/`-libei`).
 
 Runnable entry points (all via `tsx`, so `pnpm <script>`):
 - Examples (thin demos, env-var configured): `pnpm dev`, `pnpm scout`, `pnpm scout:run`, `pnpm scout:client`.

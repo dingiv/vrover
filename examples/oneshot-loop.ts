@@ -95,7 +95,7 @@ for (let step = 1; step <= MAX_STEPS; step++) {
     if (!existsSync(CAPTURE_ONE)) {
       throw new Error(
         `capture_one not built at ${CAPTURE_ONE}\n` +
-          `Build it: cargo build --example capture_one --features pipewire -p vrover-pipewire`,
+          `Build it: cargo build --example capture_one --features pipewire -p vrover-drivers`,
       );
     }
     shotPath = path.join(work, 'screen.png');

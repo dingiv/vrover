@@ -1,0 +1,2 @@
+# ONNX weights are fetched by fetch_weights.sh (AGPL-3.0, ~80MB) — not committed.
+weights/*.onnx
