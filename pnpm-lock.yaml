@@ -328,11 +328,16 @@ importers:
         specifier: workspace:*
         version: link:../tools
 
+  packages/config: {}
+
   packages/llm:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.104.2
         version: 0.104.2(zod@4.4.3)
+      '@vrover/config':
+        specifier: workspace:*
+        version: link:../config
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2
@@ -357,6 +362,9 @@ importers:
 
   packages/providers:
     dependencies:
+      '@vrover/config':
+        specifier: workspace:*
+        version: link:../config
       '@vrover/llm':
         specifier: workspace:*
         version: link:../llm

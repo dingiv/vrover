@@ -1,5 +1,5 @@
 {
-  "name": "@vrover/llm",
+  "name": "@vrover/config",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,10 +13,5 @@
   },
   "scripts": {
     "build": "tsc"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.104.2",
-    "@vrover/config": "workspace:*",
-    "dotenv": "^17.4.2"
   }
 }

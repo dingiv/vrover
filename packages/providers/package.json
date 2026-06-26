@@ -15,6 +15,7 @@
     "build": "tsc"
   },
   "dependencies": {
+    "@vrover/config": "workspace:*",
     "@vrover/llm": "workspace:*"
   }
 }
