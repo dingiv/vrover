@@ -1,4 +1,4 @@
-//! `vrover-libei` — VRover [`InputSink`] backend via **libei** (emulated input over
+//! `libei` — VRover [`InputSink`](crate::InputSink) backend via **libei** (emulated input over
 //! the xdg-desktop-portal RemoteDesktop/InputCapture interfaces).
 //!
 //! # Status (this round): scaffold.
@@ -15,7 +15,7 @@
 //!
 //! See `crates/README.md` for how to bring up the real libei backend.
 
-use vrover_drivers::{
+use crate::{
     DriverError, InputSink, Result,
     control::{Button, Key},
 };

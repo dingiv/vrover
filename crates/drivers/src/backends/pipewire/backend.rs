@@ -34,7 +34,7 @@ use pipewire::spa::pod::{Pod, Value};
 use pipewire::spa::utils::{Direction, Fraction, Rectangle, SpaTypes};
 use pipewire::stream::{Stream, StreamFlags};
 use pipewire::thread_loop::ThreadLoop;
-use vrover_drivers::{CaptureSource, DriverError, Frame, Result};
+use crate::{CaptureSource, DriverError, Frame, Result};
 
 /// Builder for [`PipeWireSource`].
 #[derive(Debug, Clone)]

@@ -1,5 +1,5 @@
-//! `vrover-uinput` — VRover [`InputSink`] backend via the Linux **uinput** kernel
-//! virtual device.
+//! `uinput` — [`InputSink`](crate::InputSink) backend via the Linux **uinput**
+//! kernel virtual device.
 //!
 //! uinput is the most portable Linux input path: it creates a virtual keyboard +
 //! mouse in `/dev/uinput` and emits raw evdev events, so it works regardless of
@@ -7,9 +7,9 @@
 //!
 //! # Layout.
 //! - [`keycode`]: the pure, always-compiled, unit-tested logical → Linux code map.
-//! - With the `backend` feature (default off): [`UinputSink`] drives a real evdev
+//! - With the `uinput` feature (default off): [`UinputSink`] drives a real evdev
 //!   `VirtualDevice`. Without it, [`UinputSink`] is a [`DriverError::NotBuilt`]
-//!   stub so the workspace builds without pulling evdev.
+//!   stub so the crate builds without pulling evdev.
 //!
 //! # Caveats.
 //! - `type_text` covers only the ASCII subset that maps to a `KEY_*`; non-ASCII
@@ -21,12 +21,12 @@
 
 pub mod keycode;
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "uinput")]
 mod backend;
-#[cfg(not(feature = "backend"))]
+#[cfg(not(feature = "uinput"))]
 mod stub;
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "uinput")]
 pub use backend::{UinputSink, UinputSinkBuilder};
-#[cfg(not(feature = "backend"))]
+#[cfg(not(feature = "uinput"))]
 pub use stub::{UinputSink, UinputSinkBuilder};

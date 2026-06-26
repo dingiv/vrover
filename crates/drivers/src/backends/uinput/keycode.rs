@@ -7,7 +7,7 @@
 //! them here (rather than depending on a codes crate) keeps the mapping testable
 //! without pulling native deps.
 
-use vrover_drivers::{Button, Key};
+use crate::{Button, Key};
 
 // ── named keys ──────────────────────────────────────────────────────────────
 pub const KEY_ENTER: u16 = 28;

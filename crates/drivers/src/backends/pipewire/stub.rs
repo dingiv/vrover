@@ -1,6 +1,6 @@
 //! Default (feature-off) stub for [`PipeWireSource`]. See crate docs.
 
-use vrover_drivers::{CaptureSource, DriverError, Frame, Result};
+use crate::{CaptureSource, DriverError, Frame, Result};
 
 /// Placeholder builder. Real options (cursor mode, source type, restore token)
 /// land with the `pipewire` feature.

@@ -3,14 +3,14 @@
 //! `/tmp/vrover-shot/cap.png`).
 //!
 //! Run (real backend + live Wayland session):
-//!   cargo run -p vrover-pipewire --example capture_one --features pipewire -- /tmp/x.png
+//!   cargo run -p vrover-drivers --example capture_one --features pipewire -- /tmp/x.png
 //!
 //! The portal may pop a "select what to share" dialog on the desktop — approve it.
 
 use std::time::{Duration, Instant};
 
 use vrover_drivers::CaptureSource;
-use vrover_pipewire::PipeWireSource;
+use vrover_drivers::backends::pipewire::PipeWireSource;
 
 fn main() {
     let out = std::env::args()

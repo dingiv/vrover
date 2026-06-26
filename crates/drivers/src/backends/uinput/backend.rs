@@ -9,9 +9,9 @@ use evdev::{
     AbsInfo, AbsoluteAxisType, AttributeSet, EventType, InputEvent, Key as EvKey, RelativeAxisType,
     UinputAbsSetup, uinput::{VirtualDevice, VirtualDeviceBuilder},
 };
-use vrover_drivers::{Button, DriverError, InputSink, Key, Result};
+use crate::{Button, DriverError, InputSink, Key, Result};
 
-use crate::keycode::{button_to_code, key_to_code};
+use super::keycode::{button_to_code, key_to_code};
 
 /// Absolute coordinate space the device advertises for ABS_X/ABS_Y. Caller pixel
 /// coords are scaled into `[0, COORD_MAX]` using the screen-size hint (or clamped
@@ -165,10 +165,10 @@ impl InputSink for UinputSink {
             if ch.is_ascii_uppercase() {
                 // Shift + lowercase-letter key, then release shift.
                 let lower = Key::Char(ch.to_ascii_lowercase());
-                self.emit_single(EventType::KEY, crate::keycode::KEY_LEFTSHIFT, 1)?;
+                self.emit_single(EventType::KEY, super::keycode::KEY_LEFTSHIFT, 1)?;
                 self.send_key(lower, true)?;
                 self.send_key(lower, false)?;
-                self.emit_single(EventType::KEY, crate::keycode::KEY_LEFTSHIFT, 0)?;
+                self.emit_single(EventType::KEY, super::keycode::KEY_LEFTSHIFT, 0)?;
             } else {
                 let code = key_to_code(Key::Char(ch)).ok_or(()).map_err(|_| {
                     not_supported(format!("uinput cannot type character {ch:?} (non-ASCII/symbol)"))
@@ -217,7 +217,7 @@ fn key_desc(k: Key) -> String {
 /// The set of Linux `KEY_*` codes our logical [`Key`] can produce, so the device
 /// advertises exactly what it can emit.
 fn emittable_key_codes() -> &'static [u16] {
-    use crate::keycode::*;
+    use super::keycode::*;
     &[
         KEY_ENTER, KEY_BACKSPACE, KEY_TAB, KEY_ESC, KEY_SPACE, KEY_INSERT, KEY_DELETE, KEY_HOME,
         KEY_END, KEY_PAGEUP, KEY_PAGEDOWN, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_LEFTSHIFT,

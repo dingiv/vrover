@@ -25,6 +25,11 @@ pub mod frame;
 pub mod input;
 pub mod mock;
 
+/// Feature-gated platform backends — `pipewire` (capture), `uinput` + `libei`
+/// (input). Each is an optional module behind a cargo feature (off by default),
+/// so this crate still builds + tests with no native system libraries.
+pub mod backends;
+
 pub use capture::CaptureSource;
 pub use control::{Button, Key};
 pub use error::{DriverError, Result};

@@ -1,6 +1,6 @@
 //! Default (feature-off) stub for [`UinputSink`]. See crate docs.
 
-use vrover_drivers::{Button, DriverError, InputSink, Key, Result};
+use crate::{Button, DriverError, InputSink, Key, Result};
 
 /// Placeholder builder (real options — screen size for abs scaling — arrive with
 /// the `backend` feature).
@@ -39,7 +39,7 @@ impl Default for UinputSink {
 }
 
 fn not_built() -> DriverError {
-    DriverError::NotBuilt("uinput backend (enable the `backend` cargo feature on vrover-uinput)")
+    DriverError::NotBuilt("uinput backend (enable the `uinput` cargo feature)")
 }
 
 impl InputSink for UinputSink {
