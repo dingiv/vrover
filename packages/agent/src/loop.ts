@@ -67,7 +67,26 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
       return { status: 'error', error: errMsg(err), steps };
     }
 
-    if (resp.text) log(`  model: ${resp.text.trim()}`);
+    if (debug) {
+      if (resp.text) {
+        log(`  ┌─ model text ─────────────────────────────────`);
+        for (const line of resp.text.split('\n')) {
+          log(`  │ ${line}`);
+        }
+      }
+      if (resp.toolUses.length > 0) {
+        const prefix = resp.text ? '  ├─' : '  ┌─';
+        log(`${prefix} tool calls (${resp.toolUses.length}) ──────────────────────`);
+        for (const tu of resp.toolUses) {
+          log(`  │  ${tu.name}(${JSON.stringify(tu.input)})`);
+        }
+      }
+      if (resp.text || resp.toolUses.length > 0) {
+        log(`  └──────────────────────────────────────────`);
+      }
+    } else {
+      if (resp.text) log(`  model: ${resp.text.trim()}`);
+    }
 
     if (resp.toolUses.length === 0) {
       // Model talked but didn't act — record it and nudge.

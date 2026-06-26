@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.2",
-    "@vrover/config": "workspace:*",
-    "dotenv": "^17.4.2"
+    "@vrover/config": "workspace:*"
   }
 }

@@ -22,8 +22,9 @@ echo "log in" | pnpm rover:app -- --mode cli                         # task pipe
 pnpm rover:app -- --help                                             # usage
 ```
 
-The real LLM path needs `ANTHROPIC_API_KEY` (copy `.env.example` → `.env`). The server boots
-without it; the key is only checked when a task runs.
+The real LLM path needs an API key — set it in `vrover.conf` or via the corresponding env var
+(e.g. `ANTHROPIC_API_KEY`, `GLM_API_KEY`). The server boots without it; the key is only checked
+when a task runs.
 
 ### Options
 

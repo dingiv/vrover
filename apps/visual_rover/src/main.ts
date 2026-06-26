@@ -1,23 +1,16 @@
 /**
  * visual-rover — the standalone VRover GUI agent (the "brain").
  *
- * Runs as a server that exposes the **agent service** over HTTP (`POST /api/run`) and ships
- * two provisional frontends: a one-shot **CLI** mode (`--mode cli`) and a **web** UI
- * (`--mode serve`, the default). The brain drives a remote Visual Scout server over the
- * custom TCP protocol via {@link RemotePlatform}; the real LLM path needs
- * `ANTHROPIC_API_KEY`, but the server boots key-free (the key is only checked when a task
- * runs).
- *
  *   pnpm rover:app                                                  # serve on :8080
  *   pnpm rover:app -- --mode cli --task "log in"                    # one-shot CLI, remote scout
- *   pnpm rover:app -- --mode cli --platform mock --task "click me"  # in-memory mock, no deps
- *   pnpm rover:app -- --mode cli --platform mock --provider glm     # pick provider
+ *   pnpm rover:app -- --mode cli --platform mock --task "click me"  # in-memory mock
  *   pnpm rover:app -- --scout-port 9000 --web-port 8080             # custom ports
  *
- * Config: reads from `vrover.conf` (CWD → ~/.vrover → /etc) + env vars.
- * The `--provider`, `--scout-host`, `--scout-port` flags override config/env.
+ * Config priority: defaults < /etc/vrover.conf < ~/.vrover/vrover.conf <
+ *                  ./vrover.conf < env vars < CLI args
  */
 import { parseArgs } from 'node:util';
+import type { VroverConfig } from '@vrover/config';
 import { runCli } from './cli.js';
 import { startWebServer } from './web.js';
 
@@ -33,17 +26,17 @@ Modes (default: serve):
 
 Options:
   --platform <p>        mock | remote | desktop (default: remote)
-  --scout-host <host>   Scout server host (default: 127.0.0.1 / $SCOUT_HOST)
-  --scout-port <port>   Scout server port (default: 7878 / $SCOUT_PORT)
-  --provider <p>        anthropic | glm | openai | vllm | custom (default: from config)
+  --scout-host <host>   Scout server host (default: from config / env)
+  --scout-port <port>   Scout server port (default: from config / env)
+  --provider <p>        anthropic | glm | openai | vllm | custom
   --task <text>         Task text (cli mode; otherwise prompt / stdin)
-  --max-steps <n>       Max agent steps (default: from config, 15)
-  --yolo-path <path>    icon_detect.onnx path for native OmniParser (desktop mode)
+  --max-steps <n>       Max agent steps (default: from config)
+  --yolo-path <path>    icon_detect.onnx path for native OmniParser
   --web-host <host>     Web server host (serve mode; default 127.0.0.1)
   --web-port <port>     Web server port (serve mode; default 8080)
   -h, --help            Show this help and exit
 
-Config: vrover.conf (CWD → ~/.vrover → /etc) + env vars.  See .env.example.`;
+Config: vrover.conf (CWD → ~/.vrover → /etc) + env vars.`;
 
 function main(): void {
   const { values } = parseArgs({
@@ -75,48 +68,74 @@ function main(): void {
     process.exit(2);
   }
 
-  const scoutHost = values['scout-host'] ?? process.env.SCOUT_HOST ?? '127.0.0.1';
-  const scoutPort = parsePort(values['scout-port'] ?? process.env.SCOUT_PORT ?? '7878', '--scout-port');
-  const maxSteps = values['max-steps'] === undefined ? undefined : parseUint(values['max-steps'], '--max-steps');
-  const provider = values.provider;
   const platform = (values.platform ?? 'remote') as 'mock' | 'remote' | 'desktop';
   if (!['mock', 'remote', 'desktop'].includes(platform)) {
     console.error(`Invalid --platform "${platform}". Use 'mock', 'remote', or 'desktop'.`);
     process.exit(2);
   }
 
+  // Build CLI overrides from flags (only set when the flag was provided).
+  const cliOverrides = buildCliOverrides(values);
+
   if (mode === 'cli') {
     void runCli({
       platform,
-      scoutHost,
-      scoutPort,
-      provider,
       task: values.task,
-      maxSteps,
-      yoloPath: values['yolo-path'],
+      overrides: cliOverrides,
     });
     return;
   }
 
   const webHost = values['web-host'] ?? '127.0.0.1';
   const webPort = parsePort(values['web-port'] ?? '8080', '--web-port');
-  void serve({ scoutHost, scoutPort, maxSteps, webHost, webPort });
+  void serve({ overrides: cliOverrides, webHost, webPort });
 }
 
-/** serve mode: boot the web server and keep it running until interrupted. */
+// ── CLI → config overrides ──────────────────────────────────────────────────
+
+function buildCliOverrides(values: Record<string, unknown>): Partial<VroverConfig> {
+  const overrides: Record<string, unknown> = {};
+
+  const provider = values.provider as string | undefined;
+  if (provider) setNested(overrides, ['llm', 'provider'], provider);
+
+  const scoutHost = values['scout-host'] as string | undefined;
+  if (scoutHost) setNested(overrides, ['scout', 'host'], scoutHost);
+
+  const scoutPort = values['scout-port'] as string | undefined;
+  if (scoutPort) setNested(overrides, ['scout', 'port'], parseUint(scoutPort, '--scout-port'));
+
+  const maxSteps = values['max-steps'] as string | undefined;
+  if (maxSteps) setNested(overrides, ['agent', 'maxSteps'], parseUint(maxSteps, '--max-steps'));
+
+  const yoloPath = values['yolo-path'] as string | undefined;
+  if (yoloPath) setNested(overrides, ['agent', 'yoloPath'], yoloPath);
+
+  return overrides as Partial<VroverConfig>;
+}
+
+function setNested(obj: Record<string, unknown>, path: string[], value: unknown) {
+  let cur = obj;
+  for (let i = 0; i < path.length - 1; i++) {
+    const k = path[i]!;
+    if (!cur[k]) cur[k] = {};
+    cur = cur[k] as Record<string, unknown>;
+  }
+  cur[path[path.length - 1]!] = value;
+}
+
+// ── serve ───────────────────────────────────────────────────────────────────
+
 async function serve(opts: {
-  scoutHost: string;
-  scoutPort: number;
-  maxSteps?: number;
+  overrides: Partial<VroverConfig>;
   webHost: string;
   webPort: number;
 }): Promise<void> {
   const server = await startWebServer({
-    scoutHost: opts.scoutHost,
-    scoutPort: opts.scoutPort,
+    scoutHost: '127.0.0.1',  // default; overridden by config/env/CLI inside
+    scoutPort: 7878,
     host: opts.webHost,
     port: opts.webPort,
-    maxSteps: opts.maxSteps,
     log: (m) => console.log(m),
   });
 
@@ -136,6 +155,8 @@ async function serve(opts: {
   });
 }
 
+// ── helpers ────────────────────────────────────────────────────────────────
+
 function parsePort(raw: string, flag: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n < 0 || n > 65535) {
@@ -154,7 +175,6 @@ function parseUint(raw: string, flag: string): number {
   return n;
 }
 
-/** `pnpm rover:app -- <args>` forwards a literal `--`; drop a leading one so flags parse. */
 function forwardedArgs(): string[] {
   const args = process.argv.slice(2);
   return args.length > 0 && args[0] === '--' ? args.slice(1) : args;

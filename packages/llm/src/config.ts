@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { loadConfig as loadVroverConfig } from '@vrover/config';
 import type { VroverConfig } from '@vrover/config';
 

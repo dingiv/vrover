@@ -24,22 +24,16 @@ import { createProviderFromEnv } from '@vrover/providers';
 
 export interface CliOptions {
   platform: 'mock' | 'remote' | 'desktop';
-  /** Scout host (remote platform only). */
-  scoutHost: string;
-  /** Scout port (remote platform only). */
-  scoutPort: number;
-  /** LLM provider override. Default: from config (`llm.provider`). */
-  provider?: string;
   task?: string;
-  maxSteps?: number;
-  /** Path to icon_detect.onnx (desktop platform). */
-  yoloPath?: string;
+  /** CLI config overrides (merged on top of config files + env vars). */
+  overrides?: Partial<VroverConfig>;
 }
 
 // ── entry ──────────────────────────────────────────────────────────────────
 
 export async function runCli(opts: CliOptions): Promise<void> {
-  const cfg = loadConfig();
+  // Merge: defaults < config files < env vars < CLI args
+  const cfg = loadConfig(opts.overrides as Partial<VroverConfig> | undefined);
   const task = await resolveTask(opts.task);
   if (!task) {
     console.error('No task provided. Pass --task, type one at the prompt, or pipe it on stdin.');
@@ -47,17 +41,17 @@ export async function runCli(opts: CliOptions): Promise<void> {
     return;
   }
 
-  console.log(`VRover agent (platform: ${opts.platform}, provider: ${opts.provider ?? cfg.llm.provider})`);
+  console.log(`VRover agent (platform: ${opts.platform}, provider: ${cfg.llm.provider})`);
   console.log(`Task: ${task}\n`);
 
   // 1. pick the LLM
-  const complete = pickProvider(opts.provider);
+  const complete = pickProvider(cfg.llm.provider);
 
   // 2. pick the platform
-  const platform = pickPlatform(opts, cfg);
+  const platform = pickPlatform(opts.platform, cfg);
 
   // 3. optionally wire the native OmniParser
-  const nativeParser = pickNativeParser(opts.yoloPath ?? cfg.agent.yoloPath);
+  const nativeParser = pickNativeParser(cfg.agent.yoloPath);
 
   // 4. run the agent loop
   let result: TaskResult;
@@ -66,7 +60,7 @@ export async function runCli(opts: CliOptions): Promise<void> {
       platform,
       complete,
       task,
-      maxSteps: opts.maxSteps,
+      maxSteps: cfg.agent.maxSteps,
       nativeParser,
       log: (line) => console.log(line),
     });
@@ -87,9 +81,8 @@ export async function runCli(opts: CliOptions): Promise<void> {
 
 // ── provider ───────────────────────────────────────────────────────────────
 
-function pickProvider(override?: string): CompleteFn {
-  const name = (override ?? process.env.LLM_PROVIDER ?? 'anthropic').toLowerCase();
-  switch (name) {
+function pickProvider(name: string): CompleteFn {
+  switch (name.toLowerCase()) {
     case 'anthropic':
       return completeAnthropic;
     case 'glm':
@@ -105,16 +98,16 @@ function pickProvider(override?: string): CompleteFn {
 
 // ── platform ───────────────────────────────────────────────────────────────
 
-function pickPlatform(opts: CliOptions, _cfg: VroverConfig): Platform {
-  switch (opts.platform) {
+function pickPlatform(platform: string, cfg: VroverConfig): Platform {
+  switch (platform) {
     case 'mock':
       return new MockPlatform();
     case 'remote':
-      return new RemotePlatform(opts.scoutHost, opts.scoutPort);
+      return new RemotePlatform(cfg.scout.host, cfg.scout.port);
     case 'desktop':
       return new DesktopPlatform();
     default:
-      throw new Error(`Unknown platform "${opts.platform}".`);
+      throw new Error(`Unknown platform "${platform}".`);
   }
 }
 
