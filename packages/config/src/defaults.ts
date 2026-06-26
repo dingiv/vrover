@@ -40,5 +40,7 @@ export const DEFAULTS: VroverConfig = {
     yoloPath: 'weights/icon_detect.onnx',
     boxThreshold: 0.05,
     iouThreshold: 0.1,
+    debug: false,
+    captureTimeoutMs: 30000,
   },
 };

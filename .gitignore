@@ -9,3 +9,4 @@ target/
 
 # napi-rs native binaries (built by `pnpm build:native`)
 packages/native/*.node
+vrover.conf

@@ -6,11 +6,13 @@ import type { VroverConfig } from './types.js';
 
 // ── search paths (lowest → highest priority) ──────────────────────────────
 
-const SEARCH_PATHS = [
-  resolve('/etc/vrover.conf'),
-  resolve(homedir(), '.vrover/vrover.conf'),
-  resolve('vrover.conf'),
-];
+function searchPaths(): string[] {
+  return [
+    resolve('/etc/vrover.conf'),
+    resolve(homedir(), '.vrover/vrover.conf'),
+    resolve('vrover.conf'),
+  ];
+}
 
 // ── deep merge ─────────────────────────────────────────────────────────────
 
@@ -69,6 +71,8 @@ const ENV_MAP: [string[], string][] = [
   [['agent', 'yoloPath'], 'YOLO_PATH'],
   [['agent', 'boxThreshold'], 'BOX_THRESHOLD'],
   [['agent', 'iouThreshold'], 'IOU_THRESHOLD'],
+  [['agent', 'debug'], 'AGENT_DEBUG'],
+  [['agent', 'captureTimeoutMs'], 'CAPTURE_TIMEOUT_MS'],
 ];
 
 function setNested(obj: Record<string, unknown>, path: string[], value: unknown) {
@@ -93,7 +97,8 @@ function applyEnvOverrides(config: Record<string, unknown>): void {
       last === 'maxTokens' ||
       last === 'maxSteps' ||
       last === 'boxThreshold' ||
-      last === 'iouThreshold';
+      last === 'iouThreshold' ||
+      last === 'captureTimeoutMs';
     setNested(config, path, isNum ? Number(raw) : raw);
   }
 }
@@ -112,11 +117,10 @@ export function loadConfig(overrides?: Partial<VroverConfig>): VroverConfig {
   let merged: Record<string, unknown> = JSON.parse(JSON.stringify(DEFAULTS));
 
   // Layer config files (low → high priority)
-  for (const path of SEARCH_PATHS) {
+  for (const path of searchPaths()) {
+    let raw: string;
     try {
-      const raw = readFileSync(path, 'utf-8');
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      merged = deepMerge(merged, parsed);
+      raw = readFileSync(path, 'utf-8');
     } catch (err) {
       // ENOENT is fine — the file just doesn't exist at this path
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -124,6 +128,18 @@ export function loadConfig(overrides?: Partial<VroverConfig>): VroverConfig {
           `Failed to read config at ${path}: ${(err as Error).message}`,
         );
       }
+      continue;
+    }
+    // Skip empty files (e.g. a placeholder vrover.conf created by touch)
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) continue;
+    try {
+      const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+      merged = deepMerge(merged, parsed);
+    } catch (err) {
+      throw new Error(
+        `Invalid JSON in config at ${path}: ${(err as Error).message}`,
+      );
     }
   }
 

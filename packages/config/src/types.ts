@@ -59,4 +59,8 @@ export interface AgentSection {
   boxThreshold: number;
   /** NMS IoU threshold. */
   iouThreshold: number;
+  /** Enable verbose per-step logging (timing, tool calls, element counts). */
+  debug: boolean;
+  /** Timeout in ms for screenshot capture (0 = no timeout). */
+  captureTimeoutMs: number;
 }

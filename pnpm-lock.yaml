@@ -309,6 +309,9 @@ importers:
 
   packages/agent:
     dependencies:
+      '@vrover/config':
+        specifier: workspace:*
+        version: link:../config
       '@vrover/llm':
         specifier: workspace:*
         version: link:../llm

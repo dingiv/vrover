@@ -1,11 +1,11 @@
 import type { ContentBlock, Message } from '@vrover/llm';
+import { loadConfig } from '@vrover/config';
 import type { NativeParser } from '@vrover/native';
 import { convertToSoMResult } from '@vrover/native';
 import type { Platform } from '@vrover/platform';
 import type { SoMElement, SoMResult } from '@vrover/som';
 import { annotate, formatTable } from '@vrover/som';
 import { TOOL_DEFS, dispatch as defaultDispatch } from '@vrover/tools';
-import { DEFAULT_MAX_STEPS } from './constants.js';
 import { prompts } from './prompts/index.js';
 import type { AgentOptions, AgentStep, DispatchFn, StepAction, TaskResult } from './types.js';
 
@@ -24,8 +24,10 @@ import type { AgentOptions, AgentStep, DispatchFn, StepAction, TaskResult } from
  * into (open decision D8). Prompts come from the `./prompts` registry.
  */
 export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
+  const cfg = loadConfig();
   const log = opts.log ?? (() => {});
-  const maxSteps = opts.maxSteps ?? DEFAULT_MAX_STEPS;
+  const debug = cfg.agent.debug;
+  const maxSteps = opts.maxSteps ?? cfg.agent.maxSteps;
   const system = opts.systemPrompt ?? prompts.render('system');
   const tools = opts.tools ?? TOOL_DEFS;
   const runTool: DispatchFn = opts.dispatch ?? defaultDispatch;
@@ -34,8 +36,10 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
   const steps: AgentStep[] = [];
 
   for (let step = 1; step <= maxSteps; step++) {
+    const tStep = debug ? performance.now() : 0;
+
     // ── observe ───────────────────────────────────────────────────────────
-    const som = await observe(opts.platform, opts.nativeParser);
+    const som = await observe(opts.platform, opts.nativeParser, cfg.agent.captureTimeoutMs);
     history.push({
       role: 'user',
       content: [
@@ -46,7 +50,13 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
         },
       ],
     });
-    log(`Step ${step}: ${som.table.length} elements visible.`);
+    if (debug) {
+      log(
+        `Step ${step}: ${som.table.length} elements (observe ${(performance.now() - tStep).toFixed(0)}ms)`,
+      );
+    } else {
+      log(`Step ${step}: ${som.table.length} elements visible.`);
+    }
 
     // ── think ─────────────────────────────────────────────────────────────
     let resp;
@@ -108,8 +118,13 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
 async function observe(
   platform: Platform,
   nativeParser?: NativeParser,
+  captureTimeoutMs?: number,
 ): Promise<SoMResult> {
-  const screenshot = await platform.captureScreen();
+  const screenshot = await withTimeout(
+    platform.captureScreen(),
+    captureTimeoutMs ?? 0,
+    'captureScreen',
+  );
 
   if (nativeParser) {
     const result = nativeParser.parse(screenshot.png);
@@ -165,4 +180,22 @@ function errMsg(err: unknown): string {
 
 function fmtInput(input: Record<string, unknown>): string {
   return JSON.stringify(input);
+}
+
+/** Race a promise against a timeout. Returns the promise result or throws. */
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  if (ms <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
