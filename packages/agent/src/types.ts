@@ -1,5 +1,6 @@
 import type { Platform } from '@vrover/platform';
 import type { CompleteFn, ToolDef } from '@vrover/llm';
+import type { NativeParser } from '@vrover/native';
 import type { SoMElement } from '@vrover/som';
 import type { DispatchResult } from '@vrover/tools';
 
@@ -58,4 +59,11 @@ export interface AgentOptions {
   maxSteps?: number;
   /** Progress sink; defaults to no-op. The demo passes console.log. */
   log?: (message: string) => void;
+  /**
+   * Optional native OmniParser (Rust via napi-rs). When set, `observe()` calls
+   * `parser.parse(screenshot.png)` — a single Rust pass that does YOLO detection
+   * + SoM annotation, skipping {@link Platform.getElements} and the TS
+   * `annotate()`.
+   */
+  nativeParser?: NativeParser;
 }

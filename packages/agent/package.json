@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@vrover/llm": "workspace:*",
+    "@vrover/native": "workspace:*",
     "@vrover/platform": "workspace:*",
     "@vrover/scout-client": "workspace:*",
     "@vrover/som": "workspace:*",

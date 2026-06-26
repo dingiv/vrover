@@ -10,13 +10,14 @@
 resolver = "2"
 members = [
     "crates/drivers",
+    "crates/native",
     "crates/omniparser",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.77"
 license = "MIT"
 authors = ["VRover"]
 description = "VRover native capture + input driver layer"

@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc --build tsconfig.build.json"
+    "build": "tsc --build tsconfig.build.json",
+    "build:native": "cd crates/native && napi build --platform --release && cp -f vrover-native.linux-x64-gnu.node ../../packages/native/"
   },
   "keywords": [
     "gui-agent",
@@ -55,6 +56,7 @@
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.0",
+    "@napi-rs/cli": "^3.7.2",
     "@types/node": "^25.9.3",
     "dotenv": "^17.4.2",
     "tsx": "^4.22.4",

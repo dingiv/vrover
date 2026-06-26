@@ -9,6 +9,7 @@
     { "path": "packages/providers" },
     { "path": "packages/tools" },
     { "path": "packages/scout" },
+    { "path": "packages/native" },
     { "path": "packages/agent" },
     { "path": "apps/visual_scout" },
     { "path": "apps/visual_rover" }

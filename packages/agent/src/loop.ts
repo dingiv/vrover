@@ -1,4 +1,6 @@
 import type { ContentBlock, Message } from '@vrover/llm';
+import type { NativeParser } from '@vrover/native';
+import { convertToSoMResult } from '@vrover/native';
 import type { Platform } from '@vrover/platform';
 import type { SoMElement, SoMResult } from '@vrover/som';
 import { annotate, formatTable } from '@vrover/som';
@@ -33,7 +35,7 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
 
   for (let step = 1; step <= maxSteps; step++) {
     // ── observe ───────────────────────────────────────────────────────────
-    const som = await observe(opts.platform);
+    const som = await observe(opts.platform, opts.nativeParser);
     history.push({
       role: 'user',
       content: [
@@ -92,9 +94,28 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
   return { status: 'max_steps', steps };
 }
 
-/** observe: capture + read elements → SoM (annotated image + element table). */
-async function observe(platform: Platform): Promise<SoMResult> {
+/**
+ * observe: capture → detect + annotate → SoM.
+ *
+ * Two paths:
+ * 1. **Rust** (when `nativeParser` is set): calls `parser.parse(png)` — YOLO
+ *    detection + SoM annotation in a single Rust pass. No `getElements()` or
+ *    TS `annotate()` needed.
+ * 2. **TS** (fallback): `platform.getElements()` + `annotate()` using
+ *    `@napi-rs/canvas`. Used when no native parser is wired (tests, mocks,
+ *    remote platforms).
+ */
+async function observe(
+  platform: Platform,
+  nativeParser?: NativeParser,
+): Promise<SoMResult> {
   const screenshot = await platform.captureScreen();
+
+  if (nativeParser) {
+    const result = nativeParser.parse(screenshot.png);
+    return convertToSoMResult(screenshot, result);
+  }
+
   const elements = await platform.getElements();
   return annotate(screenshot, elements);
 }

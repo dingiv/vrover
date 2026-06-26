@@ -6,3 +6,6 @@ playground
 # Rust
 target/
 .env.local*
+
+# napi-rs native binaries (built by `pnpm build:native`)
+packages/native/*.node

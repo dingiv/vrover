@@ -1,0 +1,22 @@
+[package]
+name = "vrover-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "napi-rs bindings for VRover OmniParser (icon detection + SoM annotation)"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vrover-omniparser = { path = "../omniparser" }
+napi = { version = "2", default-features = false, features = ["napi6"] }
+napi-derive = "2"
+image = "0.25"
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+lto = "thin"
