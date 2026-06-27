@@ -177,7 +177,13 @@ function parseUint(raw: string, flag: string): number {
 
 function forwardedArgs(): string[] {
   const args = process.argv.slice(2);
-  return args.length > 0 && args[0] === '--' ? args.slice(1) : args;
+  // pnpm forwards a literal `--` separator before the user args.
+  // Remove exactly one `--` so parseArgs sees everything as options.
+  const sepIdx = args.indexOf('--');
+  if (sepIdx >= 0) {
+    return [...args.slice(0, sepIdx), ...args.slice(sepIdx + 1)];
+  }
+  return args;
 }
 
 main();

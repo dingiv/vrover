@@ -275,3 +275,69 @@ fn parse_key(s: &str) -> Result<Key> {
         }
     }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DesktopCapture — PipeWire ScreenCast capture (behind the `capture` feature)
+// ══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(feature = "capture")]
+use std::sync::Mutex;
+#[cfg(feature = "capture")]
+use std::time::{Duration, Instant};
+#[cfg(feature = "capture")]
+use vrover_drivers::backends::pipewire::PipeWireSource;
+#[cfg(feature = "capture")]
+use vrover_drivers::CaptureSource;
+
+/// Screen capture via PipeWire ScreenCast (the dialog-free GNOME/Wayland path).
+///
+/// The ScreenCast session is negotiated **once** at construction; the PipeWire
+/// worker then runs on its own thread, and [`DesktopCapture::capture_screen`]
+/// hands back the latest decoded frame. Requires a real graphical session +
+/// xdg-desktop-portal at runtime (fails on a headless box).
+#[cfg(feature = "capture")]
+#[napi]
+pub struct DesktopCapture {
+    src: Mutex<PipeWireSource>,
+}
+
+#[cfg(feature = "capture")]
+#[napi]
+impl DesktopCapture {
+    /// Negotiate the ScreenCast session and start the PipeWire worker. This
+    /// talks to xdg-desktop-portal, so it needs a live graphical session.
+    #[napi(constructor)]
+    pub fn new() -> Result<Self> {
+        let src = PipeWireSource::new().map_err(|e| {
+            napi::Error::from_reason(format!("PipeWire capture init failed: {e}"))
+        })?;
+        Ok(Self {
+            src: Mutex::new(src),
+        })
+    }
+
+    /// Capture one frame: poll the PipeWire worker until a frame is ready
+    /// (or `timeout_ms` elapses, default 30 000 ms) and return it PNG-encoded.
+    #[napi]
+    pub fn capture_screen(&self, timeout_ms: Option<u32>) -> Result<Buffer> {
+        let timeout_ms = timeout_ms.unwrap_or(30_000);
+        let deadline = Instant::now() + Duration::from_millis(timeout_ms as u64);
+        loop {
+            {
+                let mut src = self.src.lock().expect("capture mutex poisoned");
+                match src.capture() {
+                    Ok(frame) => return Ok(Buffer::from(frame.to_png())),
+                    // Worker still warming up (no first buffer yet) — retry.
+                    Err(_) => {}
+                }
+            }
+            if Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(150));
+        }
+        Err(napi::Error::from_reason(format!(
+            "PipeWire capture timed out after {timeout_ms}ms (no frame from worker)"
+        )))
+    }
+}

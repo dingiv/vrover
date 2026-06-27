@@ -13,6 +13,11 @@ crate-type = ["cdylib"]
 default = ["uinput"]
 # Linux uinput input driver (needs /dev/uinput write access at runtime).
 uinput = ["vrover-drivers/uinput"]
+# Real PipeWire + xdg-desktop-portal ScreenCast capture backend (needs
+# libpipewire-0.3 dev headers + runtime modules — present in this container).
+# Off by default so `cargo build -p vrover-native` stays green without PipeWire
+# headers; `build:native` enables it to bake capture into the shipped .node.
+capture = ["vrover-drivers/pipewire"]
 
 [dependencies]
 vrover-drivers = { path = "../drivers", features = ["uinput"] }

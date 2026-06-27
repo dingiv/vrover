@@ -14,3 +14,4 @@ export { CalculatorPlatform } from './mock/index.js';
 export { MultiScreenPlatform } from './multi-screen.js';
 export { DesktopPlatform } from './desktop.js';
 export type { NativeLayer } from './desktop.js';
+export { DesktopNativeLayerAdapter } from './node-native-layer.js';

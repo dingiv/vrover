@@ -17,7 +17,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "tsc --build tsconfig.build.json",
-    "build:native": "cd crates/native && napi build --platform --release && cp -f vrover-native.linux-x64-gnu.node ../../packages/native/"
+    "build:native": "cd crates/native && napi build --platform --release --features capture && cp -f vrover-native.linux-x64-gnu.node ../../packages/native/"
   },
   "keywords": [
     "gui-agent",

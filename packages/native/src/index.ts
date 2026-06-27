@@ -26,6 +26,8 @@ function loadBinding(): {
     screenWidth: number | null,
     screenHeight: number | null,
   ) => DesktopNativeLayer;
+  // Only present when the .node was built with the `capture` feature.
+  DesktopCapture?: new () => DesktopCapture;
 } {
   const { platform, arch } = process;
   if (platform === 'linux' && arch === 'x64') {
@@ -80,6 +82,25 @@ export function createDesktopLayer(opts?: {
   );
 }
 
+/**
+ * Create a native screen-capture layer via PipeWire ScreenCast.
+ *
+ * The ScreenCast session is negotiated once at construction. Requires a real
+ * graphical session + xdg-desktop-portal at runtime. Throws if the `.node` was
+ * built without the `capture` feature (the binding has no `DesktopCapture`) or
+ * the portal is unreachable — callers should catch and fall back.
+ */
+export function createCapture(): DesktopCapture {
+  const Ctor = binding().DesktopCapture;
+  if (!Ctor) {
+    throw new Error(
+      '@vrover/native: DesktopCapture not available — rebuild the .node with ' +
+        'the `capture` feature (pnpm build:native).',
+    );
+  }
+  return new Ctor();
+}
+
 /** uinput-backed mouse + keyboard injection. */
 export interface DesktopNativeLayer {
   moveTo(x: number, y: number): void;
@@ -89,6 +110,15 @@ export interface DesktopNativeLayer {
   keyPress(key: string): void;
   keyRelease(key: string): void;
   tapKey(key: string): void;
+}
+
+/** PipeWire-backed screen capture. */
+export interface DesktopCapture {
+  /**
+   * Capture the latest frame as a PNG-encoded Buffer. Blocks until the first
+   * frame is ready (or `timeoutMs` elapses, default 30000).
+   */
+  captureScreen(timeoutMs?: number): Buffer;
 }
 
 // ── conversion ──────────────────────────────────────────────────────────────

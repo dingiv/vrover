@@ -17,7 +17,7 @@ import type { CompleteFn } from '@vrover/llm';
 import { createParser } from '@vrover/native';
 import type { NativeParser } from '@vrover/native';
 import type { Platform } from '@vrover/platform';
-import { MockPlatform, DesktopPlatform } from '@vrover/platform';
+import { MockPlatform, DesktopPlatform, DesktopNativeLayerAdapter } from '@vrover/platform';
 import { createProviderFromEnv } from '@vrover/providers';
 
 // ── types ──────────────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ function pickPlatform(platform: string, cfg: VroverConfig): Platform {
     case 'remote':
       return new RemotePlatform(cfg.scout.host, cfg.scout.port);
     case 'desktop':
-      return new DesktopPlatform();
+      return new DesktopPlatform(new DesktopNativeLayerAdapter());
     default:
       throw new Error(`Unknown platform "${platform}".`);
   }
