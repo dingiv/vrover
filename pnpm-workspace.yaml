@@ -4,7 +4,8 @@ allowBuilds:
 
 packages:
   - 'packages/*'
-  - 'apps/visual_rover'
+  - 'apps/visual_rover_cli'
+  - 'apps/visual_rover_web'
   - 'apps/visual_scout'
   - 'apps/visual_scout_devtools'
 

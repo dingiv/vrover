@@ -15,6 +15,9 @@ crates/native/index.d.ts
 
 vrover.conf
 
+# vite-built SPA output (web app), served statically by koa in prod
+web-dist/
+
 # Local symlink to fetched ONNX weights (absolute path; per-machine).
 # Real weights live under crates/omniparser/weights/ (already ignored) and are
 # re-fetched via crates/omniparser/fetch_weights.sh.

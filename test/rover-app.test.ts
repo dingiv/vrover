@@ -1,25 +1,17 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { startScoutServer, type ScoutServer } from '@vrover/scout';
-import { MultiScreenPlatform } from '@vrover/platform';
+import { describe, expect, it } from 'vitest';
 import type { CompleteFn } from '@vrover/llm';
-import { runTask } from '../apps/visual_rover/src/agent.js';
+import { MultiScreenPlatform } from '@vrover/platform';
+import { runAgentTask } from '../apps/visual_rover_web/src/agent.js';
 
 /**
- * End-to-end test for the visual-rover app's `runTask` agent service: it wires
- * `RemotePlatform` (brain ⇄ Scout over TCP) to the unmodified `runAgent` loop. A scripted
- * fake LLM plays the model (mark 1 = username, 2 = password, 3 = login), so the whole path
- * runs against the Scout server's per-session backend with no API key. Mirrors
- * `test/scout-loop.test.ts`.
+ * End-to-end test for the visual-rover-web app's `runAgentTask` agent service: it wires a
+ * Platform **directly** to the unmodified `runAgent` loop — self-contained, no Visual Scout
+ * server. A scripted fake LLM plays the model (mark 1 = username, 2 = password, 3 = login), so
+ * the whole observe→think→act path runs against the in-memory MultiScreenPlatform with no API key.
  */
-let scout: ScoutServer | undefined;
-afterEach(async () => {
-  if (scout) {
-    await scout.close();
-    scout = undefined;
-  }
-});
-
-function scriptedComplete(script: Array<{ name: string; input: Record<string, unknown> }>): CompleteFn {
+function scriptedComplete(
+  script: Array<{ name: string; input: Record<string, unknown> }>,
+): CompleteFn {
   let i = 0;
   return async () => {
     const action = script[i++] ?? { name: 'done', input: { summary: 'fallback' } };
@@ -33,20 +25,12 @@ function scriptedComplete(script: Array<{ name: string; input: Record<string, un
   };
 }
 
-describe('visual-rover runTask (brain ⇄ Scout ⇄ backend, over TCP)', () => {
-  it('drives the Scout backend to the home screen and returns the log', async () => {
-    const s = await startScoutServer({
-      backendFactory: () => new MultiScreenPlatform(),
-      port: 0,
-      log: () => {},
-    });
-    scout = s;
-
-    const outcome = await runTask({
-      scoutHost: s.host,
-      scoutPort: s.port,
+describe('visual-rover-web runAgentTask (loop ⇄ mock platform, in-process)', () => {
+  it('drives the mock platform to the home screen and returns the log', async () => {
+    const outcome = await runAgentTask({
       task: 'log in',
       maxSteps: 10,
+      platform: new MultiScreenPlatform(),
       complete: scriptedComplete([
         { name: 'click', input: { mark: 1 } },
         { name: 'type', input: { mark: 1, text: 'admin' } },
@@ -62,14 +46,17 @@ describe('visual-rover runTask (brain ⇄ Scout ⇄ backend, over TCP)', () => {
     expect(outcome.log.length).toBeGreaterThan(0);
   });
 
-  it('reports a clear error when the Scout server is unreachable', async () => {
-    await expect(
-      runTask({
-        scoutHost: '127.0.0.1',
-        scoutPort: 1,
-        task: 'anything',
-        complete: scriptedComplete([]),
-      }),
-    ).rejects.toThrow(/Cannot reach Visual Scout/);
+  it('returns an error result when the LLM throws', async () => {
+    const boom: CompleteFn = async () => {
+      throw new Error('model down');
+    };
+    const outcome = await runAgentTask({
+      task: 'anything',
+      platform: new MultiScreenPlatform(),
+      complete: boom,
+    });
+
+    expect(outcome.result.status).toBe('error');
+    expect(outcome.result.error).toMatch(/model down/);
   });
 });

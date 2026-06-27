@@ -42,8 +42,9 @@ pnpm scout                    # 起 Visual Scout TCP server（无需 key，自�
 pnpm scout:run                # 起 server + 大脑经 RemotePlatform 驱动它（需 key）
 pnpm scout:client             # 起 server + 用 ScoutClient SDK 脚本驱动登录（无需 key）
 pnpm scout:app                # 起独立 Visual Scout server 应用（CLI：--host/--port/--backend；无需 key）
-pnpm rover:app                # 起独立 VRover GUI agent server（serve：web UI + HTTP agent 服务；跑任务需 key）
-pnpm rover:app -- --mode cli --task "..."   # CLI 模式一次性跑一个任务
+pnpm rover:cli -- --task "..."            # CLI 一次性跑一个任务（mock/remote/desktop 平台；跑任务需 key）
+pnpm rover:web                            # 起 VRover web 应用：koa 同进程托管 Vue3 SPA + /api（dev 挂 Vite 中间件带 HMR；跑任务需 key）
+pnpm rover:web:build && pnpm rover:web:start  # 生产：先 vite build 出 web-dist，再由 koa 静态托管
 pnpm scout:app -- --devtools-port 7881       # scout 同时暴露浏览器 devtools 服务（HTTP/SSE，复用 session）
 pnpm devtools                                 # 起 Scout DevTools web UI（Vue3/Vite 客户端渲染；Vite 代理 /api → scout）
 ```
@@ -64,7 +65,8 @@ packages/
   agent/           runAgent 主循环、TaskResult、RemotePlatform（大脑；唯一消费 scout-client）
 apps/         独立应用实例（workspace 包，各自 CLI 启动）
   visual_scout/   独立 Visual Scout server（CLI 启动；对外暴露 UI 操作服务；--devtools-port 开 HTTP/SSE devtools 服务）
-  visual_rover/   独立 VRover GUI agent server（CLI 启动；cli 前端 + web 前端，对外暴露 agent 服务）
+  visual_rover_cli/     独立 VRover GUI agent（CLI 一次性前端；mock/remote/desktop 平台）
+  visual_rover_web/     VRover GUI agent + Vue3 web 前端（koa 同进程托管 API + SPA；dev 挂 Vite 中间件，prod 托管 web-dist 静态）
   visual_scout_devtools/  Scout 浏览器 DevTools UI（Vue3/Vite 客户端渲染；经 /api 代理驱动 scout devtools 服务）
 examples/     mock-run.ts / scout-server.ts / scout-run.ts / scout-client.ts
 test/         vitest

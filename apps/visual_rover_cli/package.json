@@ -1,12 +1,12 @@
 {
-  "name": "@vrover/visual-rover",
+  "name": "@vrover/visual-rover-cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "VRover — standalone GUI agent (brain) server with CLI and web frontends.",
+  "description": "VRover — the GUI agent (brain) one-shot CLI frontend.",
   "main": "./src/main.ts",
   "bin": {
-    "visual-rover": "./src/main.ts"
+    "visual-rover-cli": "./src/main.ts"
   },
   "scripts": {
     "start": "tsx src/main.ts",
