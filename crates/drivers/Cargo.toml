@@ -34,3 +34,9 @@ evdev = { version = "0.12", optional = true }
 [[example]]
 name = "capture_one"
 required-features = ["pipewire"]
+
+# Opens /dev/uinput, confirms the kernel registers the virtual device, then
+# exercises the InputSink surface. Needs the device passed through + writable.
+[[example]]
+name = "uinput_probe"
+required-features = ["uinput"]

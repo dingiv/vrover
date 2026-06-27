@@ -1,7 +1,7 @@
 //! Real uinput backend (behind the `backend` feature). Drives an evdev
 //! [`VirtualDevice`](evdev::uinput::VirtualDevice): a combined virtual keyboard +
-//! absolute pointer + wheel. See crate docs for caveats (screen scaling, ASCII-only
-//! `type_text`, root/`uinput` permission).
+//! absolute pointer + wheel. See crate docs for caveats (screen scaling,
+//! printable-ASCII `type_text`, root/`uinput` permission).
 
 use std::io;
 
@@ -11,7 +11,7 @@ use evdev::{
 };
 use crate::{Button, DriverError, InputSink, Key, Result};
 
-use super::keycode::{button_to_code, key_to_code};
+use super::keycode::{button_to_code, char_to_key, key_to_code};
 
 /// Absolute coordinate space the device advertises for ABS_X/ABS_Y. Caller pixel
 /// coords are scaled into `[0, COORD_MAX]` using the screen-size hint (or clamped
@@ -162,19 +162,16 @@ impl InputSink for UinputSink {
 
     fn type_text(&mut self, text: &str) -> Result<()> {
         for ch in text.chars() {
-            if ch.is_ascii_uppercase() {
-                // Shift + lowercase-letter key, then release shift.
-                let lower = Key::Char(ch.to_ascii_lowercase());
+            let (code, shift) = char_to_key(ch).ok_or_else(|| {
+                not_supported(format!("uinput cannot type character {ch:?} (non-ASCII/unmapped)"))
+            })?;
+            if shift {
                 self.emit_single(EventType::KEY, super::keycode::KEY_LEFTSHIFT, 1)?;
-                self.send_key(lower, true)?;
-                self.send_key(lower, false)?;
+            }
+            self.emit_single(EventType::KEY, code, 1)?;
+            self.emit_single(EventType::KEY, code, 0)?;
+            if shift {
                 self.emit_single(EventType::KEY, super::keycode::KEY_LEFTSHIFT, 0)?;
-            } else {
-                let code = key_to_code(Key::Char(ch)).ok_or(()).map_err(|_| {
-                    not_supported(format!("uinput cannot type character {ch:?} (non-ASCII/symbol)"))
-                })?;
-                self.emit_single(EventType::KEY, code, 1)?;
-                self.emit_single(EventType::KEY, code, 0)?;
             }
         }
         Ok(())
@@ -228,5 +225,78 @@ fn emittable_key_codes() -> &'static [u16] {
         // letters (QWERTY scan-code order) + digits.
         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36, 37, 38, 44, 45, 46, 47,
         48, 49, 50, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+        // US-layout symbol keys (so type_text can emit punctuation/symbols).
+        KEY_MINUS, KEY_EQUAL, KEY_LEFTBRACE, KEY_RIGHTBRACE, KEY_SEMICOLON, KEY_APOSTROPHE,
+        KEY_GRAVE, KEY_BACKSLASH, KEY_COMMA, KEY_DOT, KEY_SLASH,
     ]
+}
+
+// ── live hardware tests ──────────────────────────────────────────────────────
+//
+// These open the REAL `/dev/uinput` and inject into the live desktop, so they
+// are `#[ignore]`d: skipped by `cargo test`, run only with `--ignored`. They need
+// `/dev/uinput` passed through + writable (root/uinput group, or `chmod 0666`)
+// and a compositor (Wayland/X11) attached to turn the emitted events into
+// on-screen motion.
+//
+//   cargo test -p vrover-drivers --features uinput -- \
+//       live_demo_keyboard_and_mouse --ignored --nocapture
+
+#[cfg(test)]
+mod live_tests {
+    use super::*;
+    use crate::InputSink;
+    use std::thread;
+    use std::time::Duration;
+
+    /// Screen size (pixels) used to scale absolute pointer coords into the device
+    /// coordinate space. The live GNOME desktop is 2560×1600; override with the
+    /// `VROVER_UINPUT_SCREEN=WxH` env var so "100 px" means 100 real pixels.
+    fn screen_size() -> (u32, u32) {
+        let s = std::env::var("VROVER_UINPUT_SCREEN").unwrap_or_else(|_| "2560x1600".into());
+        let (w, h) = s.split_once('x').unwrap_or(("2560", "1600"));
+        (w.parse().unwrap_or(2560), h.parse().unwrap_or(1600))
+    }
+
+    /// Step the pointer 1px at a time from `x0` to `x1` (y fixed), sleeping
+    /// `gap` between steps — a slow, visible horizontal sweep.
+    fn h_sweep(sink: &mut UinputSink, x0: i32, x1: i32, y: i32, gap: Duration) {
+        let step = (x1 - x0).signum();
+        let mut x = x0;
+        while x != x1 {
+            x += step;
+            let _ = sink.move_to(x, y);
+            thread::sleep(gap);
+        }
+    }
+
+    #[test]
+    #[ignore = "live: opens /dev/uinput and injects keyboard+mouse on the real desktop; watch the screen"]
+    fn live_demo_keyboard_and_mouse() {
+        let (w, h) = screen_size();
+
+        // 1. immediately create the virtual keyboard + mouse (one combined evdev
+        //    device advertising keys + absolute pointer + wheel).
+        eprintln!("[live] screen hint {w}x{h}; opening virtual keyboard+mouse via /dev/uinput…");
+        let mut sink = UinputSink::with_screen(w, h).expect("open /dev/uinput");
+        eprintln!("[live] device live — kernel registered \"VRover uinput sink\".");
+
+        // 2. keyboard: type 'demo_uinput' — the underscore is now mappable
+        //    (Shift + KEY_MINUS), so the whole string injects.
+        eprintln!("[live] typing 'demo_uinput'…");
+        match sink.type_text("demo_uinput") {
+            Ok(()) => eprintln!("[live]   typed 'demo_uinput' ok"),
+            Err(e) => eprintln!("[live]   ✗ type_text failed: {e}"),
+        }
+        thread::sleep(Duration::from_millis(300));
+
+        // 3. mouse: from screen center, sweep RIGHT 100 px slowly, then LEFT back.
+        let (cx, cy) = (w as i32 / 2, h as i32 / 2);
+        eprintln!("[live] mouse sweep: {cx},{cy} → RIGHT +100px (slow)…");
+        h_sweep(&mut sink, cx, cx + 100, cy, Duration::from_millis(20));
+        thread::sleep(Duration::from_millis(200));
+        eprintln!("[live] mouse sweep: → LEFT back to {cx},{cy} (slow)…");
+        h_sweep(&mut sink, cx + 100, cx, cy, Duration::from_millis(20));
+        eprintln!("[live] done.");
+    }
 }

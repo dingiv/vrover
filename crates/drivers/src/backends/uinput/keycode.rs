@@ -40,6 +40,19 @@ pub const KEY_F10: u16 = 68;
 pub const KEY_F11: u16 = 87;
 pub const KEY_F12: u16 = 88;
 
+// ── US-layout symbol keys (the unshifted/shifted glyph each key produces) ────
+pub const KEY_MINUS: u16 = 12; // - _
+pub const KEY_EQUAL: u16 = 13; // = +
+pub const KEY_LEFTBRACE: u16 = 26; // [ {
+pub const KEY_RIGHTBRACE: u16 = 27; // ] }
+pub const KEY_SEMICOLON: u16 = 39; // ; :
+pub const KEY_APOSTROPHE: u16 = 40; // ' "
+pub const KEY_GRAVE: u16 = 41; // ` ~
+pub const KEY_BACKSLASH: u16 = 43; // \ |
+pub const KEY_COMMA: u16 = 51; // , <
+pub const KEY_DOT: u16 = 52; // . >
+pub const KEY_SLASH: u16 = 53; // / ?
+
 // ── mouse buttons (BTN_*) ────────────────────────────────────────────────────
 pub const BTN_LEFT: u16 = 0x110;
 pub const BTN_RIGHT: u16 = 0x111;
@@ -144,6 +157,71 @@ fn char_to_code(c: char) -> Option<u16> {
     }
 }
 
+/// A `type_text` character resolved to its `(KEY_* scan code, needs-shift)` pair.
+///
+/// This is the *text* mapping — case- and shift-aware — used by
+/// [`UinputSink::type_text`](crate::UinputSink::type_text). It covers the whole
+/// printable ASCII set: letters (shift iff uppercase), digits, the US-layout
+/// symbol keys (unshifted/shifted pairs), and space. Anything with no key
+/// (non-ASCII, control chars) maps to `None`, which `type_text` reports as
+/// `NotSupported`.
+///
+/// For the *physical key* mapping used by press/release (letters/digits/space,
+/// case-insensitive, no shift), see [`char_to_code`].
+pub fn char_to_key(c: char) -> Option<(u16, bool)> {
+    // Letters, digits, and space reuse the physical scan code; shift is needed
+    // only for uppercase letters (digits/space are never uppercase).
+    if let Some(code) = char_to_code(c) {
+        return Some((code, c.is_ascii_uppercase()));
+    }
+    // US-layout symbol pairs: each physical key yields an unshifted and a
+    // shifted glyph. Shifted digits share the digit scan codes (!@#$%^&*()).
+    let (code, shift) = match c {
+        '-' => (KEY_MINUS, false),
+        '_' => (KEY_MINUS, true),
+        '=' => (KEY_EQUAL, false),
+        '+' => (KEY_EQUAL, true),
+        '[' => (KEY_LEFTBRACE, false),
+        '{' => (KEY_LEFTBRACE, true),
+        ']' => (KEY_RIGHTBRACE, false),
+        '}' => (KEY_RIGHTBRACE, true),
+        '\\' => (KEY_BACKSLASH, false),
+        '|' => (KEY_BACKSLASH, true),
+        ';' => (KEY_SEMICOLON, false),
+        ':' => (KEY_SEMICOLON, true),
+        '\'' => (KEY_APOSTROPHE, false),
+        '"' => (KEY_APOSTROPHE, true),
+        '`' => (KEY_GRAVE, false),
+        '~' => (KEY_GRAVE, true),
+        ',' => (KEY_COMMA, false),
+        '<' => (KEY_COMMA, true),
+        '.' => (KEY_DOT, false),
+        '>' => (KEY_DOT, true),
+        '/' => (KEY_SLASH, false),
+        '?' => (KEY_SLASH, true),
+        _ => return shifted_digit(c),
+    };
+    Some((code, shift))
+}
+
+/// `!@#$%^&*()` → the `(digit scan code, shift)` for the digit key they share.
+fn shifted_digit(c: char) -> Option<(u16, bool)> {
+    let digit = match c {
+        '!' => '1',
+        '@' => '2',
+        '#' => '3',
+        '$' => '4',
+        '%' => '5',
+        '^' => '6',
+        '&' => '7',
+        '*' => '8',
+        '(' => '9',
+        ')' => '0',
+        _ => return None,
+    };
+    char_to_code(digit).map(|code| (code, true))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -181,9 +259,46 @@ mod tests {
 
     #[test]
     fn unmappables_return_none() {
-        assert_eq!(key_to_code(Key::Char('!')), None); // symbol
+        assert_eq!(key_to_code(Key::Char('!')), None); // symbol — no *physical* key
         assert_eq!(key_to_code(Key::Char('中')), None); // non-ASCII
         assert_eq!(key_to_code(Key::Char('\n')), None);
+    }
+
+    #[test]
+    fn char_to_key_letters_and_digits() {
+        assert_eq!(char_to_key('a'), Some((30, false)));
+        assert_eq!(char_to_key('A'), Some((30, true))); // uppercase → shift
+        assert_eq!(char_to_key('Z'), Some((44, true)));
+        assert_eq!(char_to_key('7'), Some((8, false)));
+        assert_eq!(char_to_key('0'), Some((11, false)));
+        assert_eq!(char_to_key(' '), Some((KEY_SPACE, false)));
+    }
+
+    #[test]
+    fn char_to_key_symbol_pairs() {
+        // The original gap: underscore now maps (Shift + KEY_MINUS).
+        assert_eq!(char_to_key('_'), Some((KEY_MINUS, true)));
+        assert_eq!(char_to_key('-'), Some((KEY_MINUS, false)));
+        assert_eq!(char_to_key('.'), Some((KEY_DOT, false)));
+        assert_eq!(char_to_key('>'), Some((KEY_DOT, true)));
+        assert_eq!(char_to_key('/'), Some((KEY_SLASH, false)));
+        assert_eq!(char_to_key('?'), Some((KEY_SLASH, true)));
+        assert_eq!(char_to_key('{'), Some((KEY_LEFTBRACE, true)));
+    }
+
+    #[test]
+    fn char_to_key_shifted_digits() {
+        assert_eq!(char_to_key('!'), Some((2, true))); // Shift+'1'
+        assert_eq!(char_to_key('@'), Some((3, true))); // Shift+'2'
+        assert_eq!(char_to_key('('), Some((10, true))); // Shift+'9'
+        assert_eq!(char_to_key(')'), Some((11, true))); // Shift+'0'
+    }
+
+    #[test]
+    fn char_to_key_unmappables_are_none() {
+        assert_eq!(char_to_key('中'), None); // non-ASCII
+        assert_eq!(char_to_key('\n'), None); // control char
+        assert_eq!(char_to_key('\t'), None); // tab is a named key, not a glyph here
     }
 
     #[test]

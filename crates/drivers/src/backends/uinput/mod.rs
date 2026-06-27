@@ -12,12 +12,13 @@
 //!   stub so the crate builds without pulling evdev.
 //!
 //! # Caveats.
-//! - `type_text` covers only the ASCII subset that maps to a `KEY_*`; non-ASCII
-//!   returns `NotSupported` (use the libei backend for arbitrary unicode).
+//! - `type_text` covers the printable ASCII subset (letters, digits, and the
+//!   US-layout symbol keys via Shift); non-ASCII returns `NotSupported` (use the
+//!   libei backend for arbitrary unicode).
 //! - Absolute-pointer scaling to screen geometry is approximate without a screen
 //!   size hint; pass one via [`UinputSink::with_screen`] (backend feature).
-//! - Live injection needs `/dev/uinput` write access + a real session; this
-//!   container can compile it but not run it (see `crates/README.md`).
+//! - Live injection needs `/dev/uinput` write access (root or the `uinput` group,
+//!   or `chmod 0666`) + a compositor session to route the events to the cursor.
 
 pub mod keycode;
 
