@@ -293,6 +293,9 @@ importers:
       '@vrover/platform':
         specifier: workspace:*
         version: link:../../packages/platform
+      '@vrover/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       koa:
         specifier: ^2.15.4
         version: 2.16.4

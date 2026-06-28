@@ -1,16 +1,35 @@
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { DEFAULTS } from './defaults.js';
 import type { VroverConfig } from './types.js';
 
 // ── search paths (lowest → highest priority) ──────────────────────────────
 
+/**
+ * Walk up from `cwd` collecting every `vrover.conf`, root-first → cwd-last so the closest one
+ * wins when layered (like tsconfig.json / package.json discovery). pnpm `--filter` runs each app
+ * with `cwd` set to its package dir, so a config at the monorepo root is invisible to a plain
+ * `./vrover.conf` lookup — walking up finds it regardless of which package launched the process.
+ */
+function projectConfigPaths(): string[] {
+  const found: string[] = [];
+  let dir = process.cwd();
+  let prev = '';
+  for (let i = 0; i < 16 && dir !== prev; i++) {
+    found.push(resolve(dir, 'vrover.conf'));
+    prev = dir;
+    dir = dirname(dir);
+  }
+  found.reverse(); // root-first (lowest prio) → cwd (highest prio)
+  return found;
+}
+
 function searchPaths(): string[] {
   return [
     resolve('/etc/vrover.conf'),
     resolve(homedir(), '.vrover/vrover.conf'),
-    resolve('vrover.conf'),
+    ...projectConfigPaths(),
   ];
 }
 
@@ -110,7 +129,7 @@ function applyEnvOverrides(config: Record<string, unknown>): void {
  * overlay env vars, then apply programmatic `overrides`.
  *
  * Priority: defaults < /etc/vrover.conf < ~/.vrover/vrover.conf <
- *           ./vrover.conf < env vars < overrides
+ *           ancestor `vrover.conf` (nearest wins) < env vars < overrides
  */
 export function loadConfig(overrides?: Partial<VroverConfig>): VroverConfig {
   // Start with defaults (deep clone so we don't mutate the const)

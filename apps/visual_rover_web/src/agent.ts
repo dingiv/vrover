@@ -1,9 +1,11 @@
 import { runAgent } from '@vrover/agent';
 import type { TaskResult } from '@vrover/agent';
-import { complete as completeAnthropic, loadConfig } from '@vrover/llm';
+import { complete as completeAnthropic } from '@vrover/llm';
 import type { CompleteFn } from '@vrover/llm';
+import { createProviderFromEnv } from '@vrover/providers';
 import { MockPlatform } from '@vrover/platform';
 import type { Platform } from '@vrover/platform';
+import { loadConfig as loadVroverConfig } from '@vrover/config';
 
 /**
  * The VRover web agent service — a self-contained observe→think→act loop with a visual
@@ -13,7 +15,7 @@ import type { Platform } from '@vrover/platform';
  *
  * `complete` and `platform` are **injectable**, so tests drive the whole loop with a scripted
  * fake LLM and a richer mock platform. The default `complete` reads config lazily — a missing
- * `ANTHROPIC_API_KEY` surfaces as a clear error *when a task runs*, not when the server boots.
+ * API key surfaces as a clear error *when a task runs*, not when the server boots.
  */
 export interface RunAgentTaskOptions {
   /** The user's natural-language goal. */
@@ -21,8 +23,8 @@ export interface RunAgentTaskOptions {
   /** Max agent steps; `runAgent`'s default (from config) when omitted. */
   maxSteps?: number;
   /**
-   * LLM exit point. Defaults to the real Anthropic adapter (needs `ANTHROPIC_API_KEY`).
-   * Injectable for tests.
+   * LLM exit point. Defaults to the provider selected by `vrover.conf`'s `llm.provider`
+   * (`glm`→GLM native, `anthropic`→Anthropic adapter). Injectable for tests.
    */
   complete?: CompleteFn;
   /** Target the loop drives. Defaults to the in-memory {@link MockPlatform}. */
@@ -54,10 +56,25 @@ export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentT
 }
 
 /**
- * The real Anthropic adapter. `loadConfig()` is read here (not at startup) so the
- * `ANTHROPIC_API_KEY` requirement is enforced per task, letting the server boot key-free.
+ * Pick the LLM exit point from `vrover.conf`'s `llm.provider`. GLM/OpenAI/vLLM/custom go through
+ * `@vrover/providers` (the native OpenAI-compatible adapter — proven on GLM-5V-Turbo); `anthropic`
+ * uses the Anthropic SDK adapter. Read lazily here so the API-key requirement is enforced per
+ * task, letting the server boot key-free.
  */
 function defaultComplete(): CompleteFn {
-  loadConfig();
-  return completeAnthropic;
+  return pickProvider(loadVroverConfig().llm.provider);
+}
+
+function pickProvider(name: string): CompleteFn {
+  switch (name.toLowerCase()) {
+    case 'anthropic':
+      return completeAnthropic;
+    case 'glm':
+    case 'openai':
+    case 'vllm':
+    case 'custom':
+      return createProviderFromEnv();
+    default:
+      return completeAnthropic;
+  }
 }
