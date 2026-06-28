@@ -1,5 +1,5 @@
 /**
- * visual-rover-web — the VRover GUI agent (brain) with a Vue 3 web frontend.
+ * visual-rover-web — the VRover GUI agent (brain) with a React web frontend.
  *
  * One koa process serves BOTH the API (`/api/*`) and the SPA. In dev (NODE_ENV != production)
  * it mounts Vite's dev middleware (HMR); in prod it serves the built `web-dist/` statically
@@ -47,7 +47,7 @@ const MIME: Record<string, string> = {
 };
 
 const USAGE = `\
-visual-rover-web — VRover GUI agent (brain) + Vue 3 web UI
+visual-rover-web — VRover GUI agent (brain) + React web UI
 
 Usage:
   NODE_ENV=development tsx src/server.ts [options]   # dev (Vite middleware + HMR)

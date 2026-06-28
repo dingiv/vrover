@@ -6,6 +6,7 @@
     "types": ["vite/client", "node"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "useDefineForClassFields": true,
     "isolatedModules": true
   },

@@ -28,7 +28,7 @@ The `drivers` crate builds + tests with no native system libraries under default
 
 Runnable entry points (all via `tsx`, so `pnpm <script>`):
 - Examples (thin demos, env-var configured): `pnpm dev`, `pnpm scout`, `pnpm scout:run`, `pnpm scout:client`.
-- Standalone apps (CLI-arg configured, see `apps/`): `pnpm scout:app`, `pnpm rover:cli` / `pnpm rover:desktop` (CLI one-shot), `pnpm rover:web` (koa + Vue3 SPA, dev = Vite middleware). Pass args with `pnpm <script> -- <args>` (e.g. `pnpm scout:app -- --port 9000`).
+- Standalone apps (CLI-arg configured, see `apps/`): `pnpm scout:app`, `pnpm rover:cli` / `pnpm rover:desktop` (CLI one-shot), `pnpm rover:web` (koa + React SPA, dev = Vite middleware). Pass args with `pnpm <script> -- <args>` (e.g. `pnpm scout:app -- --port 9000`).
 - DevTools UI (`apps/visual_scout_devtools`, a **Vue 3 + Vite client-rendered SPA**): `pnpm devtools` (Vite dev server, HMR), `pnpm devtools:build` (`vue-tsc` + `vite build`), `pnpm devtools:preview`. Point it at a scout devtools port with `SCOUT_DEVTOOLS_API=http://host:port pnpm devtools`.
 
 API keys: the real LLM path needs an API key — set it in `vrover.conf` or via the corresponding env var (e.g. `ANTHROPIC_API_KEY`, `GLM_API_KEY`). The Scout server, the apps' boot, and all tests run **without** a key.
