@@ -55,7 +55,7 @@ export async function runCli(opts: CliOptions): Promise<void> {
   const wantNative = opts.platform === 'desktop' || !!opts.overrides?.agent?.yoloPath;
   const nativeParser = wantNative ? pickNativeParser(cfg.agent.yoloPath) : undefined;
 
-  // 4. run the agent loop
+  // 4. run the agent loop — agent config resolved here (the shell), not in createAgent
   let result: TaskResult;
   try {
     result = await runAgent({
@@ -63,6 +63,10 @@ export async function runCli(opts: CliOptions): Promise<void> {
       complete,
       task,
       maxSteps: cfg.agent.maxSteps,
+      contextWindow: cfg.agent.contextWindow,
+      keepScreenshots: cfg.agent.keepScreenshots,
+      captureTimeoutMs: cfg.agent.captureTimeoutMs,
+      debug: cfg.agent.debug,
       nativeParser,
       log: (line) => console.log(line),
     });

@@ -213,6 +213,9 @@ importers:
       '@vrover/llm':
         specifier: workspace:*
         version: link:packages/llm
+      '@vrover/logger':
+        specifier: workspace:*
+        version: link:packages/logger
       '@vrover/platform':
         specifier: workspace:*
         version: link:packages/platform
@@ -402,6 +405,8 @@ importers:
       '@vrover/config':
         specifier: workspace:*
         version: link:../config
+
+  packages/logger: {}
 
   packages/native:
     dependencies:

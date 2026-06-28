@@ -1,11 +1,39 @@
-import { runAgent, createAgent } from '@vrover/agent';
+import { runAgent, createAgent, RemotePlatform } from '@vrover/agent';
 import type { Task, TaskResult } from '@vrover/agent';
 import { complete as completeAnthropic } from '@vrover/llm';
 import type { CompleteFn } from '@vrover/llm';
 import { createProviderFromEnv } from '@vrover/providers';
 import { MockPlatform } from '@vrover/platform';
+import { DesktopPlatform, DesktopNativeLayerAdapter } from '@vrover/platform';
 import type { Platform } from '@vrover/platform';
 import { loadConfig as loadVroverConfig } from '@vrover/config';
+import type { VroverConfig } from '@vrover/config';
+
+/**
+ * Selectable platform backends — the same three the CLI exposes.
+ * `mock` is the default (in-memory, no OS access, boots key-free).
+ */
+export type PlatformName = 'mock' | 'remote' | 'desktop';
+
+export const PLATFORM_NAMES: readonly PlatformName[] = ['mock', 'remote', 'desktop'];
+
+/**
+ * Build the {@link Platform} for a given backend name, mirroring the CLI's `pickPlatform`.
+ * Swapping the target is the *only* change — `runAgent`/SoM/tools are identical regardless.
+ *   mock     → in-memory {@link MockPlatform}
+ *   remote   → a Visual Scout server (`host`/`port` from `vrover.conf`)
+ *   desktop  → the reserved Rust seam (native capture/input via {@link DesktopNativeLayerAdapter})
+ */
+export function createPlatform(name: PlatformName, cfg: VroverConfig): Platform {
+  switch (name) {
+    case 'mock':
+      return new MockPlatform();
+    case 'remote':
+      return new RemotePlatform(cfg.scout.host, cfg.scout.port);
+    case 'desktop':
+      return new DesktopPlatform(new DesktopNativeLayerAdapter());
+  }
+}
 
 /**
  * The VRover web agent service — a self-contained observe→think→act loop with a visual
@@ -41,12 +69,17 @@ export interface RunAgentTaskOutcome {
 export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentTaskOutcome> {
   const log: string[] = [];
   const platform = opts.platform ?? new MockPlatform();
+  const { complete, ...agentCfg } = resolveConfig(opts);
 
   const result = await runAgent({
     platform,
-    complete: opts.complete ?? defaultComplete(),
+    complete,
     task: opts.task,
-    maxSteps: opts.maxSteps,
+    maxSteps: opts.maxSteps ?? agentCfg.maxSteps,
+    contextWindow: agentCfg.contextWindow,
+    keepScreenshots: agentCfg.keepScreenshots,
+    captureTimeoutMs: agentCfg.captureTimeoutMs,
+    debug: agentCfg.debug,
     log: (line: string) => {
       log.push(line);
     },
@@ -62,20 +95,40 @@ export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentT
  */
 export function createStreamingTask(opts: RunAgentTaskOptions): Task {
   const platform = opts.platform ?? new MockPlatform();
+  const { complete, ...agentCfg } = resolveConfig(opts);
   return createAgent({
     platform,
-    complete: opts.complete ?? defaultComplete(),
+    complete,
+    contextWindow: agentCfg.contextWindow,
+    keepScreenshots: agentCfg.keepScreenshots,
+    captureTimeoutMs: agentCfg.captureTimeoutMs,
+    debug: agentCfg.debug,
+    maxSteps: agentCfg.maxSteps,
   }).createTask(opts.task);
 }
 
 /**
- * Pick the LLM exit point from `vrover.conf`'s `llm.provider`. GLM/OpenAI/vLLM/custom go through
- * `@vrover/providers` (the native OpenAI-compatible adapter — proven on GLM-5V-Turbo); `anthropic`
- * uses the Anthropic SDK adapter. Read lazily here so the API-key requirement is enforced per
- * task, letting the server boot key-free.
+ * Resolve the LLM exit point + agent config from `vrover.conf` **once per task**.
+ * The caller-supplied `complete` wins over config; `maxSteps` is the per-task override
+ * (optional — `runAgent` already defaults from config).
  */
-function defaultComplete(): CompleteFn {
-  return pickProvider(loadVroverConfig().llm.provider);
+function resolveConfig(opts: RunAgentTaskOptions): {
+  complete: CompleteFn;
+  contextWindow: number;
+  keepScreenshots: number;
+  captureTimeoutMs: number;
+  debug: boolean;
+  maxSteps: number;
+} {
+  const cfg = loadVroverConfig();
+  return {
+    complete: opts.complete ?? pickProvider(cfg.llm.provider),
+    contextWindow: cfg.agent.contextWindow,
+    keepScreenshots: cfg.agent.keepScreenshots,
+    captureTimeoutMs: cfg.agent.captureTimeoutMs,
+    debug: cfg.agent.debug,
+    maxSteps: cfg.agent.maxSteps,
+  };
 }
 
 function pickProvider(name: string): CompleteFn {

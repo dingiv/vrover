@@ -43,6 +43,7 @@
   "dependencies": {
     "@vrover/agent": "workspace:*",
     "@vrover/llm": "workspace:*",
+    "@vrover/logger": "workspace:*",
     "@vrover/platform": "workspace:*",
     "@vrover/providers": "workspace:*",
     "@vrover/scout": "workspace:*",

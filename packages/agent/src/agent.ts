@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { loadConfig } from '@vrover/config';
 import type { CompleteFn, LLMResponse, Message, ToolDef } from '@vrover/llm';
 import type { NativeParser } from '@vrover/native';
 import type { Platform } from '@vrover/platform';
@@ -45,12 +44,11 @@ interface Brain {
 }
 
 /**
- * Wire up an {@link Agent}. Config (`loadConfig`) is read **here in the factory**, not in the
- * constructor — the resulting `AgentImpl` constructor is pure (field assignment only). Collaborators
- * default from config when not supplied via `deps`.
+ * Wire up an {@link Agent}. All config is resolved by the caller and passed via `deps` —
+ * this factory is pure (no I/O, no `loadConfig`). Sensible hardcoded fallbacks match the
+ * defaults in `@vrover/config` so tests work with zero config.
  */
 export function createAgent(deps: AgentDeps): Agent {
-  const cfg = loadConfig();
   const brain: Brain = {
     platform: deps.platform,
     complete: deps.complete,
@@ -59,11 +57,11 @@ export function createAgent(deps: AgentDeps): Agent {
     tools: deps.tools ?? TOOL_DEFS,
     system: deps.systemPrompt ?? prompts.render('system'),
     log: deps.log ?? (() => {}),
-    contextWindow: deps.contextWindow ?? cfg.agent.contextWindow,
-    keepScreenshots: deps.keepScreenshots ?? cfg.agent.keepScreenshots,
-    captureTimeoutMs: cfg.agent.captureTimeoutMs,
-    debug: cfg.agent.debug,
-    maxStepsDefault: cfg.agent.maxSteps,
+    contextWindow: deps.contextWindow ?? 4,
+    keepScreenshots: deps.keepScreenshots ?? 2,
+    captureTimeoutMs: deps.captureTimeoutMs ?? 30000,
+    debug: deps.debug ?? false,
+    maxStepsDefault: deps.maxSteps ?? 15,
     memory: deps.memory,
   };
   return new AgentImpl(brain);

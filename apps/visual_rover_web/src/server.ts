@@ -11,6 +11,14 @@
  * The dev/prod switch on the SERVER is `process.env.NODE_ENV`. The CLIENT distinguishes dev/prod
  * via Vite's `import.meta.env.DEV` / `.MODE` (statically replaced at build time — server-side code
  * can't read it). `NODE_ENV` is the single switch both Vite and koa honour.
+ *
+ * ## Layers
+ *
+ *   routes.ts   ← 分发层 (HTTP dispatch, request parse, SSE handshake)
+ *   service.ts  ← 业务层 (agent orchestration, task lifecycle)
+ *   store.ts    ← 持久层 (TaskStore interface + MemoryTaskStore)
+ *   agent.ts    ← LLM / platform adapter to @vrover/agent
+ *   server.ts   ← this file: CLI + wiring + process lifecycle
  */
 import http from 'node:http';
 import path from 'node:path';
@@ -19,8 +27,14 @@ import { readFile, stat } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import Koa from 'koa';
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
-import { runAgentTask, createStreamingTask } from './agent.js';
-import type { TaskEvent } from '@vrover/agent';
+import { loadConfig } from '@vrover/config';
+import type { VroverConfig } from '@vrover/config';
+import type { Platform } from '@vrover/platform';
+import { AgentService } from './service.js';
+import { MemoryTaskStore } from './store.js';
+import { createRoutes } from './routes.js';
+import { createPlatform, PLATFORM_NAMES } from './agent.js';
+import type { PlatformName } from './agent.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, '..');
@@ -29,8 +43,6 @@ const VITE_CONFIG = path.join(APP_DIR, 'vite.config.ts');
 
 /** Server dev/prod switch. `import.meta.env` is client-only; NODE_ENV is the shared signal. */
 const isDev = process.env.NODE_ENV !== 'production';
-
-const MAX_BODY_BYTES = 1 << 16; // 64 KiB — well above any plausible natural-language task.
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -55,15 +67,22 @@ Usage:
   NODE_ENV=production  tsx src/server.ts [options]   # prod (serve web-dist/)
 
 Options:
-  --host <host>     Listen host (default: 127.0.0.1)
-  --port <port>     Listen port (default: 8080)
-  --max-steps <n>   Max agent steps per task (default: from config)
-  -h, --help        Show this help and exit`;
+  --host <host>       Listen host (default: 127.0.0.1)
+  --port <port>       Listen port (default: 8080)
+  --platform <p>      mock | remote | desktop (default: mock)
+  --scout-host <host> Scout server host (remote platform; default: from config / env)
+  --scout-port <port> Scout server port (remote platform; default: from config / env)
+  --max-steps <n>     Max agent steps per task (default: from config)
+  -h, --help          Show this help and exit`;
 
 interface ServerOptions {
   host: string;
   port: number;
   maxSteps?: number;
+  /** Resolved target platform (one per server; selected at boot). */
+  platform: Platform;
+  /** Backend name, for logging. */
+  platformName: PlatformName;
   log: (line: string) => void;
 }
 
@@ -74,83 +93,15 @@ interface WebHandle {
 }
 
 async function startServer(opts: ServerOptions): Promise<WebHandle> {
+  // ── wire layers: store → service → routes ───────────────────────────────
+  const store = new MemoryTaskStore();
+  const service = new AgentService(store, opts.platform);
+  const routes = createRoutes(service, isDev);
+
   const app = new Koa();
-
-  // ── API (manual routing — just two endpoints) ───────────────────────────
-  app.use(async (ctx, next) => {
-    if (ctx.method === 'GET' && ctx.path === '/api/health') {
-      ctx.body = { ok: true, mode: isDev ? 'development' : 'production' };
-      return;
-    }
-    if (ctx.method === 'POST' && ctx.path === '/api/run') {
-      let body: unknown;
-      try {
-        body = await readJsonBody(ctx.req);
-      } catch (err) {
-        ctx.status = 400;
-        ctx.body = { error: `invalid request body: ${errMsg(err)}` };
-        return;
-      }
-      const task =
-        body && typeof body === 'object' && typeof (body as { task?: unknown }).task === 'string'
-          ? (body as { task: string }).task.trim()
-          : '';
-      if (!task) {
-        ctx.status = 400;
-        ctx.body = { error: 'request body must be { task: string }' };
-        return;
-      }
-      try {
-        const outcome = await runAgentTask({ task, maxSteps: opts.maxSteps });
-        ctx.body = { result: outcome.result, log: outcome.log };
-      } catch (err) {
-        ctx.status = 500;
-        ctx.body = { error: errMsg(err) };
-      }
-      return;
-    }
-    if (ctx.method === 'GET' && ctx.path === '/api/run/stream') {
-      const task = (ctx.query.task as string | undefined)?.trim();
-      if (!task) {
-        ctx.status = 400;
-        ctx.body = { error: 'query param `task` is required' };
-        return;
-      }
-      const maxSteps = parseUintSafe(ctx.query.maxSteps as string | undefined);
-
-      // SSE handshake
-      ctx.req.socket.setTimeout(0);
-      ctx.req.socket.setNoDelay(true);
-      ctx.req.socket.setKeepAlive(true);
-      ctx.set({
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        'X-Accel-Buffering': 'no', // disable nginx buffering
-      });
-      ctx.respond = false; // take over the raw response
-      const res = ctx.res;
-      res.writeHead(200);
-
-      const sse = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-      const t = createStreamingTask({ task });
-      t.on((ev: TaskEvent) => sse(ev));
-
-      try {
-        await t.run({ maxSteps });
-      } catch (err) {
-        sse({ type: 'error', result: { status: 'error', error: errMsg(err), steps: [...t.steps] } });
-      } finally {
-        res.end();
-      }
-      return;
-    }
-    await next();
-  });
+  app.use(routes);
 
   // ── SPA: dev = Vite middleware (HMR); prod = static + SPA fallback ──────
-  // Registered before `listen()` so it is in the composed middleware stack; the closure reads
-  // `vite` (assigned right after the server starts listening).
   let vite: ViteDevServer | undefined;
   if (isDev) {
     app.use(async (ctx) => {
@@ -159,9 +110,6 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
         ctx.body = 'dev server is starting…';
         return;
       }
-      // Delegate to Vite's connect middleware — it serves index.html, transforms modules on
-      // demand, and (via hmr.server) the HMR websocket. It writes straight to ctx.res; koa's
-      // responder sees `res.writableEnded` and bails, so nothing double-writes.
       await new Promise<void>((resolve, reject) => {
         vite!.middlewares(ctx.req, ctx.res, (err: unknown) =>
           err instanceof Error ? reject(err) : resolve(),
@@ -180,13 +128,12 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
     vite = await createViteServer({
       root: APP_DIR,
       configFile: VITE_CONFIG,
-      // Bind Vite's HMR websocket to our koa http server (otherwise the client ws can't connect
-      // in middleware mode). `appType` defaults to 'spa' → Vite serves index.html + fallback.
       server: { middlewareMode: true, hmr: { server: httpServer } },
     });
   }
 
   opts.log(`VRover web server listening on http://${opts.host}:${opts.port} (${isDev ? 'dev' : 'prod'})`);
+  opts.log(`  platform: ${opts.platformName}`);
   if (isDev) opts.log(`  Vite middleware + HMR (root: ${APP_DIR})`);
   else opts.log(`  serving ${WEB_DIST}`);
 
@@ -200,10 +147,10 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
   };
 }
 
-/** Serve a static file from `root`, falling back to the SPA's index.html (client-side routing). */
+/** Serve a static file from `root`, falling back to the SPA index.html. */
 async function serveStatic(ctx: Koa.Context, root: string): Promise<void> {
   const rel = decodeURIComponent(ctx.path);
-  const filePath = path.resolve(root, '.' + rel); // rel starts with '/'
+  const filePath = path.resolve(root, '.' + rel);
   if (!filePath.startsWith(root)) {
     ctx.status = 403;
     return;
@@ -214,35 +161,9 @@ async function serveStatic(ctx: Koa.Context, root: string): Promise<void> {
     ctx.body = await readFile(target);
     ctx.type = MIME[path.extname(target)] ?? 'application/octet-stream';
   } catch {
-    // Not a file → SPA shell.
     ctx.type = 'html';
     ctx.body = await readFile(path.join(root, 'index.html'));
   }
-}
-
-/** Read + JSON-parse a request body, capped at MAX_BODY_BYTES. */
-function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let data = '';
-    let tooLarge = false;
-    req.setEncoding('utf8');
-    req.on('data', (chunk: string) => {
-      data += chunk;
-      if (Buffer.byteLength(data) > MAX_BODY_BYTES) {
-        tooLarge = true;
-        req.destroy();
-      }
-    });
-    req.on('error', reject);
-    req.on('end', () => {
-      if (tooLarge) return reject(new Error(`body exceeds ${MAX_BODY_BYTES} bytes`));
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
 }
 
 // ── entry ────────────────────────────────────────────────────────────────────
@@ -252,6 +173,9 @@ async function main(): Promise<void> {
     options: {
       host: { type: 'string' },
       port: { type: 'string' },
+      platform: { type: 'string' },
+      'scout-host': { type: 'string' },
+      'scout-port': { type: 'string' },
       'max-steps': { type: 'string' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -268,6 +192,10 @@ async function main(): Promise<void> {
   const port = parsePort(values.port ?? '8080');
   const maxSteps = values['max-steps'] ? parseUint(values['max-steps'], '--max-steps') : undefined;
 
+  const platformName = parsePlatformName(values.platform);
+  const cfg = loadConfig(buildScoutOverrides(values));
+  const platform = createPlatform(platformName, cfg);
+
   if (!isDev) {
     try {
       await readFile(path.join(WEB_DIST, 'index.html'));
@@ -281,11 +209,14 @@ async function main(): Promise<void> {
     host,
     port,
     maxSteps,
+    platform,
+    platformName,
     log: (line) => console.log(line),
   });
 
   console.log('\n  open  http://%s:%d', server.host, server.port);
   console.log('  POST /api/run  { task: string }   → { result, log }');
+  console.log('  GET  /api/run/stream?task=...     → SSE step-by-step');
   console.log('  GET  /api/health                  → liveness probe');
   console.log('\nPress Ctrl+C to stop.');
 
@@ -309,12 +240,6 @@ function parsePort(raw: string): number {
   return n;
 }
 
-function parseUintSafe(raw: string | undefined): number | undefined {
-  if (!raw) return undefined;
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : undefined;
-}
-
 function parseUint(raw: string, flag: string): number {
   const n = Number(raw);
   if (!Number.isInteger(n) || n <= 0) {
@@ -324,18 +249,45 @@ function parseUint(raw: string, flag: string): number {
   return n;
 }
 
+/** Resolve + validate `--platform` (default `mock`). */
+function parsePlatformName(raw: string | undefined): PlatformName {
+  const name = (raw ?? 'mock') as PlatformName;
+  if (!PLATFORM_NAMES.includes(name)) {
+    console.error(
+      `Invalid --platform "${raw}". Use one of: ${PLATFORM_NAMES.join(', ')}.`,
+    );
+    process.exit(2);
+  }
+  return name;
+}
+
+/** Build config overrides for the Scout server address (remote platform only). */
+function buildScoutOverrides(values: Record<string, unknown>): Partial<VroverConfig> {
+  const overrides: Record<string, unknown> = {};
+  const scoutHost = values['scout-host'] as string | undefined;
+  const scoutPort = values['scout-port'] as string | undefined;
+  if (scoutHost) setNested(overrides, ['scout', 'host'], scoutHost);
+  if (scoutPort) setNested(overrides, ['scout', 'port'], parseUint(scoutPort, '--scout-port'));
+  return overrides as Partial<VroverConfig>;
+}
+
+function setNested(obj: Record<string, unknown>, path: string[], value: unknown): void {
+  let cur = obj;
+  for (let i = 0; i < path.length - 1; i++) {
+    const k = path[i]!;
+    if (!cur[k]) cur[k] = {};
+    cur = cur[k] as Record<string, unknown>;
+  }
+  cur[path[path.length - 1]!] = value;
+}
+
 function forwardedArgs(): string[] {
   const args = process.argv.slice(2);
-  // pnpm forwards a literal `--` separator before the user args.
   const sepIdx = args.indexOf('--');
   if (sepIdx >= 0) {
     return [...args.slice(0, sepIdx), ...args.slice(sepIdx + 1)];
   }
   return args;
-}
-
-function errMsg(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }
 
 void main();

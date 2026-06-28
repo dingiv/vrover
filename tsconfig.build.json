@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/logger" },
     { "path": "packages/config" },
     { "path": "packages/scout-protocol" },
     { "path": "packages/scout-client" },

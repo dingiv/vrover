@@ -132,9 +132,11 @@ export interface Task {
 
 /**
  * The collaborators an {@link Agent} **composes** (composition over inheritance — no base class).
- * `task` and `maxSteps` are deliberately absent: they are per-task (`Agent.createTask` / `.run`).
- * `createAgent(deps)` reads the config file and resolves these defaults; the `AgentImpl` constructor
- * receives them already-resolved (pure — no I/O).
+ * `task` is deliberately absent: it is per-task (`Agent.createTask` / `.run`).
+ *
+ * All config fields are **resolved by the upper layer** (not read from disk here). Sensible
+ * hardcoded fallbacks apply when a field is omitted — matching the defaults in `@vrover/config`
+ * so tests work zero-config. The `AgentImpl` constructor is pure (field assignment only).
  */
 export interface AgentDeps {
   platform: Platform;
@@ -154,20 +156,24 @@ export interface AgentDeps {
    * annotation, skipping {@link Platform.getElements} and the TS `annotate()`.
    */
   nativeParser?: NativeParser;
-  /** Recent steps kept verbatim before older turns are compacted (default from config). */
+  /** Recent steps kept verbatim before older turns are compacted (default: 4). */
   contextWindow?: number;
-  /** Max screenshots carried as image blocks (default from config). */
+  /** Max screenshots carried as image blocks (default: 2). */
   keepScreenshots?: number;
+  /** Timeout in ms for screenshot capture, 0 = no timeout (default: 30000). */
+  captureTimeoutMs?: number;
+  /** Enable verbose per-step logging — timing, tool calls, element counts (default: false). */
+  debug?: boolean;
+  /** Default max steps for tasks created by this agent (default: 15). */
+  maxSteps?: number;
   /** Optional persistence for task save/load. Defaults to none. */
   memory?: MemoryManager;
 }
 
-/** Options for {@link runAgent} — {@link AgentDeps} plus the per-run `task` / `maxSteps`. */
+/** Options for {@link runAgent} — {@link AgentDeps} plus the per-run `task`. */
 export interface AgentOptions extends AgentDeps {
   /** The user's natural-language goal. */
   task: string;
-  /** Max steps before giving up (default from config). */
-  maxSteps?: number;
 }
 
 /**
