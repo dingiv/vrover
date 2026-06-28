@@ -1,0 +1,317 @@
+import { randomUUID } from 'node:crypto';
+import { loadConfig } from '@vrover/config';
+import type { CompleteFn, LLMResponse, Message, ToolDef } from '@vrover/llm';
+import type { NativeParser } from '@vrover/native';
+import type { Platform } from '@vrover/platform';
+import { formatTable } from '@vrover/som';
+import { TOOL_DEFS, dispatch as defaultDispatch } from '@vrover/tools';
+import { pruneForModel, turnBoundaries } from './context.js';
+import { prompts } from './prompts/index.js';
+import { act, errMsg, observe } from './step.js';
+import type {
+  Agent,
+  AgentDeps,
+  AgentStatus,
+  AgentStep,
+  DispatchFn,
+  MemoryManager,
+  Task,
+  TaskResult,
+  TaskSnapshot,
+} from './types.js';
+
+/**
+ * Resolved collaborators + config + memory — the shared "brain". `createAgent` builds it (the one
+ * place config is read); both {@link AgentImpl} and {@link TaskImpl} hold a reference. This is the
+ * composition seam: a `Task` composes a `Brain` (plus its own state), never a concrete back-ref to
+ * `AgentImpl`.
+ */
+interface Brain {
+  readonly platform: Platform;
+  readonly complete: CompleteFn;
+  readonly runTool: DispatchFn;
+  readonly nativeParser: NativeParser | undefined;
+  readonly tools: ToolDef[];
+  readonly system: string;
+  readonly log: (message: string) => void;
+  readonly contextWindow: number;
+  readonly keepScreenshots: number;
+  readonly captureTimeoutMs: number;
+  readonly debug: boolean;
+  readonly maxStepsDefault: number;
+  readonly memory: MemoryManager | undefined;
+}
+
+/**
+ * Wire up an {@link Agent}. Config (`loadConfig`) is read **here in the factory**, not in the
+ * constructor — the resulting `AgentImpl` constructor is pure (field assignment only). Collaborators
+ * default from config when not supplied via `deps`.
+ */
+export function createAgent(deps: AgentDeps): Agent {
+  const cfg = loadConfig();
+  const brain: Brain = {
+    platform: deps.platform,
+    complete: deps.complete,
+    runTool: deps.dispatch ?? defaultDispatch,
+    nativeParser: deps.nativeParser,
+    tools: deps.tools ?? TOOL_DEFS,
+    system: deps.systemPrompt ?? prompts.render('system'),
+    log: deps.log ?? (() => {}),
+    contextWindow: deps.contextWindow ?? cfg.agent.contextWindow,
+    keepScreenshots: deps.keepScreenshots ?? cfg.agent.keepScreenshots,
+    captureTimeoutMs: cfg.agent.captureTimeoutMs,
+    debug: cfg.agent.debug,
+    maxStepsDefault: cfg.agent.maxSteps,
+    memory: deps.memory,
+  };
+  return new AgentImpl(brain);
+}
+
+/** A wired-up brain: factory + holder of the shared collaborators/config/memory. No per-task state. */
+class AgentImpl implements Agent {
+  constructor(private readonly brain: Brain) {}
+
+  get memory(): MemoryManager | undefined {
+    return this.brain.memory;
+  }
+
+  createTask(goal: string, opts?: { id?: string }): Task {
+    const id = opts?.id ?? randomUUID();
+    return new TaskImpl(this.brain, goal, id);
+  }
+
+  async loadTask(id: string): Promise<Task | null> {
+    if (!this.brain.memory) {
+      throw new Error('Agent has no MemoryManager — cannot loadTask.');
+    }
+    const snap = await this.brain.memory.load(id);
+    return snap ? TaskImpl.fromSnapshot(this.brain, snap) : null;
+  }
+
+  /** Convenience: create a task and run it to a stop. (`runAgent` uses this.) */
+  run(goal: string, opts?: { maxSteps?: number }): Promise<TaskResult> {
+    return this.createTask(goal).run(opts);
+  }
+}
+
+/**
+ * The lifecycle of one conversation task. Holds the history/steps/status; delegates observe/act to
+ * `./step.js` and context pruning to `./context.js`. Created by an {@link AgentImpl} with a shared
+ * {@link Brain}.
+ */
+class TaskImpl implements Task {
+  private readonly brain: Brain;
+  private readonly _id: string;
+  private readonly _goal: string;
+  private _history: Message[];
+  private _steps: AgentStep[] = [];
+  private _status: AgentStatus = 'idle';
+  private _result: TaskResult | undefined;
+  private pauseRequested = false;
+  private stepCounter = 0;
+
+  constructor(brain: Brain, goal: string, id: string) {
+    this.brain = brain;
+    this._goal = goal;
+    this._id = id;
+    this._history = [{ role: 'user', content: [{ type: 'text', text: goal }] }];
+  }
+
+  /** Restore a task from a persisted snapshot (turn boundaries re-derive from history on demand). */
+  static fromSnapshot(brain: Brain, snap: TaskSnapshot): TaskImpl {
+    const t = new TaskImpl(brain, snap.goal, snap.id);
+    t._history = snap.history;
+    t._steps = snap.steps;
+    t._status = snap.status === 'running' ? 'idle' : snap.status; // a restored task is never mid-loop
+    t._result = snap.result;
+    t.stepCounter = snap.steps.length;
+    t.pauseRequested = false;
+    return t;
+  }
+
+  // ── accessors ─────────────────────────────────────────────────────────────
+  get id(): string {
+    return this._id;
+  }
+  get goal(): string {
+    return this._goal;
+  }
+  get status(): AgentStatus {
+    return this._status;
+  }
+  get history(): readonly Message[] {
+    return this._history;
+  }
+  get steps(): readonly AgentStep[] {
+    return this._steps;
+  }
+  get result(): TaskResult | undefined {
+    return this._result;
+  }
+
+  // ── auto-pilot ────────────────────────────────────────────────────────────
+  async run(opts?: { maxSteps?: number }): Promise<TaskResult> {
+    if (this._status === 'done' || this._status === 'error') {
+      return this._result ?? { status: 'max_steps', steps: this._steps };
+    }
+    const maxSteps = opts?.maxSteps ?? this.brain.maxStepsDefault;
+    this._status = 'running';
+    this.pauseRequested = false;
+
+    while (this._status === 'running' && !this.pauseRequested && this.stepCounter < maxSteps) {
+      await this.exec();
+    }
+
+    // exec() sets _result/_status on done|error. Handle the two loop-exit reasons here:
+    if (this._status === 'running') {
+      if (this.pauseRequested) {
+        this._status = 'paused';
+        this._result = { status: 'paused', steps: this._steps };
+      } else {
+        this._status = 'done';
+        this._result = { status: 'max_steps', steps: this._steps };
+        this.brain.log(`Reached max steps (${maxSteps}) without finishing.`);
+      }
+    }
+    return this._result!;
+  }
+
+  // ── one chat iteration ────────────────────────────────────────────────────
+  async exec(opts?: { message?: string }): Promise<AgentStep | null> {
+    if (this._status === 'done' || this._status === 'error') return null;
+    const b = this.brain;
+    const step = this.stepCounter + 1;
+    const tStep = b.debug ? performance.now() : 0;
+
+    if (opts?.message) {
+      this._history.push({ role: 'user', content: [{ type: 'text', text: opts.message }] });
+    }
+
+    // ── observe ─────────────────────────────────────────────────────────────
+    const som = await observe(b.platform, b.nativeParser, b.captureTimeoutMs);
+    this._history.push({
+      role: 'user',
+      content: [
+        { type: 'image', mediaType: 'image/png', data: som.annotated.png },
+        { type: 'text', text: prompts.render('step', { step, elementTable: formatTable(som.table) }) },
+      ],
+    });
+    b.log(
+      b.debug
+        ? `Step ${step}: ${som.table.length} elements (observe ${(performance.now() - tStep).toFixed(0)}ms)`
+        : `Step ${step}: ${som.table.length} elements visible.`,
+    );
+
+    // ── think ───────────────────────────────────────────────────────────────
+    let resp: LLMResponse;
+    try {
+      resp = await b.complete({
+        system: b.system,
+        messages: pruneForModel(this._history, {
+          contextWindow: b.contextWindow,
+          keepScreenshots: b.keepScreenshots,
+        }),
+        tools: b.tools,
+      });
+    } catch (err) {
+      const m = errMsg(err);
+      b.log(`LLM error: ${m}`);
+      this._status = 'error';
+      this._result = { status: 'error', error: m, steps: this._steps };
+      return null;
+    }
+    this.logModelOutput(resp);
+
+    // ── act (or nudge if the model only talked) ─────────────────────────────
+    if (resp.toolUses.length === 0) {
+      this._history.push({ role: 'assistant', content: resp.raw });
+      this._history.push({
+        role: 'user',
+        content: [{ type: 'text', text: prompts.render('nudge') }],
+      });
+      const stepRecord: AgentStep = { index: step, elements: som.table.length, actions: [] };
+      this.commitStep(stepRecord);
+      return stepRecord;
+    }
+
+    this._history.push({ role: 'assistant', content: resp.raw });
+    const { actions, toolResults, finished, summary } = await act(
+      resp.toolUses,
+      som.table,
+      b.platform,
+      b.runTool,
+      b.log,
+    );
+    this._history.push({ role: 'user', content: toolResults });
+    const stepRecord: AgentStep = { index: step, elements: som.table.length, actions };
+    this.commitStep(stepRecord);
+
+    if (finished) {
+      b.log(`Task complete${summary ? `: ${summary}` : ''}.`);
+      this._status = 'done';
+      this._result = { status: 'success', summary, steps: this._steps };
+    }
+    return stepRecord;
+  }
+
+  // ── rewind ─────────────────────────────────────────────────────────────────
+  goto(step: number): void {
+    const bounds = turnBoundaries(this._history);
+    const n = Math.max(0, Math.min(step, this._steps.length));
+    if (n === 0) {
+      this._history = [{ role: 'user', content: [{ type: 'text', text: this._goal }] }];
+    } else {
+      this._history = this._history.slice(0, bounds[n - 1]!);
+    }
+    this._steps = this._steps.slice(0, n);
+    this.stepCounter = n;
+    this._status = 'idle';
+    this._result = undefined;
+    this.pauseRequested = false;
+  }
+
+  // ── interrupt ──────────────────────────────────────────────────────────────
+  pause(): void {
+    this.pauseRequested = true;
+  }
+
+  // ── persist ────────────────────────────────────────────────────────────────
+  async save(): Promise<void> {
+    if (!this.brain.memory) {
+      throw new Error('Agent has no MemoryManager — cannot save task.');
+    }
+    await this.brain.memory.save({
+      id: this._id,
+      goal: this._goal,
+      history: this._history,
+      steps: this._steps,
+      status: this._status,
+      result: this._result,
+    });
+  }
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+  private commitStep(step: AgentStep): void {
+    this._steps.push(step);
+    this.stepCounter = step.index;
+  }
+
+  /** Debug box-drawing for the model's text + tool calls (mirrors the original loop). */
+  private logModelOutput(resp: LLMResponse): void {
+    const log = this.brain.log;
+    if (!this.brain.debug) {
+      if (resp.text) log(`  model: ${resp.text.trim()}`);
+      return;
+    }
+    if (resp.text) {
+      log('  ┌─ model text ─────────────────────────────────');
+      for (const line of resp.text.split('\n')) log(`  │ ${line}`);
+    }
+    if (resp.toolUses.length > 0) {
+      const prefix = resp.text ? '  ├─' : '  ┌─';
+      log(`${prefix} tool calls (${resp.toolUses.length}) ──────────────────────`);
+      for (const tu of resp.toolUses) log(`  │  ${tu.name}(${JSON.stringify(tu.input)})`);
+    }
+    if (resp.text || resp.toolUses.length > 0) log('  └──────────────────────────────────────────');
+  }
+}

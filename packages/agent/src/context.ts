@@ -66,6 +66,22 @@ function groupTurns(history: Message[]): TurnGroup {
   return { preamble, turns };
 }
 
+/**
+ * History length after each completed turn (preamble length + each turn's messages, in order).
+ * The boundaries `goto` truncates to — derived from history, so a restored task needs no extra
+ * persisted state.
+ */
+export function turnBoundaries(history: Message[]): number[] {
+  const { preamble, turns } = groupTurns(history);
+  const out: number[] = [];
+  let acc = preamble.length;
+  for (const turn of turns) {
+    acc += turn.length;
+    out.push(acc);
+  }
+  return out;
+}
+
 function hasImage(m: Message): boolean {
   return m.content.some((b) => b.type === 'image');
 }
