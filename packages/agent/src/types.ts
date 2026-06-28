@@ -45,6 +45,25 @@ export interface TaskResult {
 /** Lifecycle of a {@link Task}. */
 export type AgentStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
 
+// ── streaming events ─────────────────────────────────────────────────────────
+
+/** Events a {@link Task} emits so consumers (e.g. an SSE server) can stream progress. */
+export type TaskEventType = 'step' | 'log' | 'done' | 'error' | 'paused';
+
+/** One streamed event from a {@link Task}. All fields are JSON-serialisable. */
+export interface TaskEvent {
+  type: TaskEventType;
+  /** Set for `step` events. */
+  step?: AgentStep;
+  /** Set for `log` events. */
+  text?: string;
+  /** Set for terminal events (`done`, `error`, `paused`). */
+  result?: TaskResult;
+}
+
+/** Subscribes to streaming progress from a {@link Task}. */
+export type TaskListener = (event: TaskEvent) => void;
+
 // ── memory ──────────────────────────────────────────────────────────────────
 
 /** A serializable snapshot of a {@link Task} — what a {@link MemoryManager} persists. */
@@ -102,6 +121,11 @@ export interface Task {
   goto(step: number): void;
   pause(): void;
   save(): Promise<void>;
+
+  /** Subscribe to streaming progress events (step / log / done / error / paused). */
+  on(listener: TaskListener): void;
+  /** Unsubscribe a previously registered listener. */
+  off(listener: TaskListener): void;
 }
 
 // ── agent ───────────────────────────────────────────────────────────────────

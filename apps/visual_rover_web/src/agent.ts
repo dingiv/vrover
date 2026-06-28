@@ -1,5 +1,5 @@
-import { runAgent } from '@vrover/agent';
-import type { TaskResult } from '@vrover/agent';
+import { runAgent, createAgent } from '@vrover/agent';
+import type { Task, TaskResult } from '@vrover/agent';
 import { complete as completeAnthropic } from '@vrover/llm';
 import type { CompleteFn } from '@vrover/llm';
 import { createProviderFromEnv } from '@vrover/providers';
@@ -53,6 +53,19 @@ export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentT
   });
 
   return { result, log };
+}
+
+/**
+ * Create a streaming {@link Task} wired to a mock platform + the configured LLM.
+ * The caller subscribes via `task.on(listener)`, then calls `task.run()` — events fire
+ * as each step completes. Ideal for SSE endpoints.
+ */
+export function createStreamingTask(opts: RunAgentTaskOptions): Task {
+  const platform = opts.platform ?? new MockPlatform();
+  return createAgent({
+    platform,
+    complete: opts.complete ?? defaultComplete(),
+  }).createTask(opts.task);
 }
 
 /**

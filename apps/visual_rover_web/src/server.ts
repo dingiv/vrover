@@ -19,7 +19,8 @@ import { readFile, stat } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import Koa from 'koa';
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
-import { runAgentTask } from './agent.js';
+import { runAgentTask, createStreamingTask } from './agent.js';
+import type { TaskEvent } from '@vrover/agent';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, '..');
@@ -105,6 +106,42 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
       } catch (err) {
         ctx.status = 500;
         ctx.body = { error: errMsg(err) };
+      }
+      return;
+    }
+    if (ctx.method === 'GET' && ctx.path === '/api/run/stream') {
+      const task = (ctx.query.task as string | undefined)?.trim();
+      if (!task) {
+        ctx.status = 400;
+        ctx.body = { error: 'query param `task` is required' };
+        return;
+      }
+      const maxSteps = parseUintSafe(ctx.query.maxSteps as string | undefined);
+
+      // SSE handshake
+      ctx.req.socket.setTimeout(0);
+      ctx.req.socket.setNoDelay(true);
+      ctx.req.socket.setKeepAlive(true);
+      ctx.set({
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no', // disable nginx buffering
+      });
+      ctx.respond = false; // take over the raw response
+      const res = ctx.res;
+      res.writeHead(200);
+
+      const sse = (data: unknown) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+      const t = createStreamingTask({ task });
+      t.on((ev: TaskEvent) => sse(ev));
+
+      try {
+        await t.run({ maxSteps });
+      } catch (err) {
+        sse({ type: 'error', result: { status: 'error', error: errMsg(err), steps: [...t.steps] } });
+      } finally {
+        res.end();
       }
       return;
     }
@@ -270,6 +307,12 @@ function parsePort(raw: string): number {
     process.exit(2);
   }
   return n;
+}
+
+function parseUintSafe(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 function parseUint(raw: string, flag: string): number {

@@ -16,6 +16,8 @@ import type {
   DispatchFn,
   MemoryManager,
   Task,
+  TaskEvent,
+  TaskListener,
   TaskResult,
   TaskSnapshot,
 } from './types.js';
@@ -109,6 +111,7 @@ class TaskImpl implements Task {
   private _result: TaskResult | undefined;
   private pauseRequested = false;
   private stepCounter = 0;
+  private readonly listeners = new Set<TaskListener>();
 
   constructor(brain: Brain, goal: string, id: string) {
     this.brain = brain;
@@ -167,10 +170,15 @@ class TaskImpl implements Task {
       if (this.pauseRequested) {
         this._status = 'paused';
         this._result = { status: 'paused', steps: this._steps };
+        this.brain.log('Task paused.');
+        this.emit({ type: 'paused', result: this._result });
       } else {
         this._status = 'done';
         this._result = { status: 'max_steps', steps: this._steps };
-        this.brain.log(`Reached max steps (${maxSteps}) without finishing.`);
+        const msg = `Reached max steps (${maxSteps}) without finishing.`;
+        this.brain.log(msg);
+        this.emit({ type: 'log', text: msg });
+        this.emit({ type: 'done', result: this._result });
       }
     }
     return this._result!;
@@ -182,6 +190,12 @@ class TaskImpl implements Task {
     const b = this.brain;
     const step = this.stepCounter + 1;
     const tStep = b.debug ? performance.now() : 0;
+
+    // Wrapped log: routes to both the injected log sink AND every streaming listener.
+    const log = (msg: string) => {
+      b.log(msg);
+      this.emit({ type: 'log', text: msg });
+    };
 
     if (opts?.message) {
       this._history.push({ role: 'user', content: [{ type: 'text', text: opts.message }] });
@@ -196,7 +210,7 @@ class TaskImpl implements Task {
         { type: 'text', text: prompts.render('step', { step, elementTable: formatTable(som.table) }) },
       ],
     });
-    b.log(
+    log(
       b.debug
         ? `Step ${step}: ${som.table.length} elements (observe ${(performance.now() - tStep).toFixed(0)}ms)`
         : `Step ${step}: ${som.table.length} elements visible.`,
@@ -215,12 +229,13 @@ class TaskImpl implements Task {
       });
     } catch (err) {
       const m = errMsg(err);
-      b.log(`LLM error: ${m}`);
+      log(`LLM error: ${m}`);
       this._status = 'error';
       this._result = { status: 'error', error: m, steps: this._steps };
+      this.emit({ type: 'error', result: this._result });
       return null;
     }
-    this.logModelOutput(resp);
+    this.logModelOutput(log, resp);
 
     // ── act (or nudge if the model only talked) ─────────────────────────────
     if (resp.toolUses.length === 0) {
@@ -231,6 +246,7 @@ class TaskImpl implements Task {
       });
       const stepRecord: AgentStep = { index: step, elements: som.table.length, actions: [] };
       this.commitStep(stepRecord);
+      this.emit({ type: 'step', step: stepRecord });
       return stepRecord;
     }
 
@@ -240,16 +256,18 @@ class TaskImpl implements Task {
       som.table,
       b.platform,
       b.runTool,
-      b.log,
+      log,
     );
     this._history.push({ role: 'user', content: toolResults });
     const stepRecord: AgentStep = { index: step, elements: som.table.length, actions };
     this.commitStep(stepRecord);
+    this.emit({ type: 'step', step: stepRecord });
 
     if (finished) {
-      b.log(`Task complete${summary ? `: ${summary}` : ''}.`);
+      log(`Task complete${summary ? `: ${summary}` : ''}.`);
       this._status = 'done';
       this._result = { status: 'success', summary, steps: this._steps };
+      this.emit({ type: 'done', result: this._result });
     }
     return stepRecord;
   }
@@ -290,6 +308,23 @@ class TaskImpl implements Task {
     });
   }
 
+  // ── streaming ─────────────────────────────────────────────────────────────
+  on(listener: TaskListener): void {
+    this.listeners.add(listener);
+  }
+  off(listener: TaskListener): void {
+    this.listeners.delete(listener);
+  }
+  private emit(event: TaskEvent): void {
+    for (const l of this.listeners) {
+      try {
+        l(event);
+      } catch {
+        // A listener must never break the loop.
+      }
+    }
+  }
+
   // ── helpers ────────────────────────────────────────────────────────────────
   private commitStep(step: AgentStep): void {
     this._steps.push(step);
@@ -297,8 +332,7 @@ class TaskImpl implements Task {
   }
 
   /** Debug box-drawing for the model's text + tool calls (mirrors the original loop). */
-  private logModelOutput(resp: LLMResponse): void {
-    const log = this.brain.log;
+  private logModelOutput(log: (msg: string) => void, resp: LLMResponse): void {
     if (!this.brain.debug) {
       if (resp.text) log(`  model: ${resp.text.trim()}`);
       return;

@@ -60,10 +60,16 @@ button:disabled {
   background: #8c959f;
   cursor: default;
 }
+button.cancel {
+  background: #cf222e;
+}
 .status {
   margin-left: auto;
   font-size: 13px;
   color: #57606a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .status.ok {
   color: #1a7f37;
@@ -71,6 +77,24 @@ button:disabled {
 .status.bad {
   color: #cf222e;
 }
+
+/* Spinner for "running…" */
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #d0d7de;
+  border-top-color: #1f6feb;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 section {
   margin-top: 20px;
 }
@@ -92,9 +116,32 @@ pre {
   max-height: 420px;
   overflow: auto;
 }
+pre.step {
+  margin-bottom: 8px;
+  max-height: 200px;
+  border-left: 3px solid #1f6feb;
+  animation: fadeIn 0.25s ease-out;
+}
 pre.ok {
   border-color: #1a7f37;
 }
 pre.bad {
   border-color: #cf222e;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.log-wrap {
+  position: relative;
+}
+.log-wrap pre {
+  max-height: 300px;
 }
