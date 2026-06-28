@@ -63,4 +63,14 @@ export interface AgentSection {
   debug: boolean;
   /** Timeout in ms for screenshot capture (0 = no timeout). */
   captureTimeoutMs: number;
+  /**
+   * Max screenshots carried as image blocks in the model context: only the most recent N are kept,
+   * older ones are replaced with a text note. Bounds the dominant token cost on a vision model.
+   */
+  keepScreenshots: number;
+  /**
+   * Number of recent steps kept verbatim in the model context. Steps older than this are collapsed
+   * into compact one-line summaries (element tables + screenshots dropped, actions retained).
+   */
+  contextWindow: number;
 }

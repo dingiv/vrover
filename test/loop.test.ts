@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MockPlatform } from '@vrover/platform';
 import { runAgent, type DispatchFn } from '@vrover/agent';
-import type { CompleteFn } from '@vrover/llm';
+import type { CompleteFn, Message } from '@vrover/llm';
 
 /**
  * Integration test for the agent loop. A scripted fake LLM plays the model: it emits a fixed
@@ -103,5 +103,49 @@ describe('runAgent loop', () => {
     expect(seenTools[0]).toEqual(['ping']); // custom tools reached the model
     expect(dispatchCalls).toEqual(['ping']); // custom dispatch ran, not the default
     expect(result.status).toBe('max_steps'); // never called done within 1 step
+  });
+
+  it('bounds context: ≤ keepScreenshots images + a compacted summary over many steps', async () => {
+    const platform = new MockPlatform();
+    const captured: Message[][] = [];
+    const script = [
+      { name: 'click', input: { mark: 1 } },
+      { name: 'click', input: { mark: 1 } },
+      { name: 'click', input: { mark: 1 } },
+      { name: 'click', input: { mark: 1 } },
+      { name: 'done', input: { summary: 'done' } },
+    ];
+    let i = 0;
+    const complete: CompleteFn = async (req) => {
+      captured.push(req.messages);
+      const a = script[i++] ?? { name: 'done', input: { summary: 'fallback' } };
+      const id = `tu_${i}`;
+      return {
+        text: null,
+        toolUses: [{ id, name: a.name, input: a.input }],
+        raw: [{ type: 'tool_use', id, name: a.name, input: a.input }],
+        stopReason: 'tool_use',
+      };
+    };
+    const result = await runAgent({
+      platform,
+      complete,
+      task: 'do stuff',
+      maxSteps: 10,
+      contextWindow: 2,
+      keepScreenshots: 2,
+    });
+    expect(result.status).toBe('success');
+
+    const last = captured[captured.length - 1]!;
+    const images = last.reduce(
+      (n, m) => n + m.content.filter((b) => b.type === 'image').length,
+      0,
+    );
+    expect(images).toBeLessThanOrEqual(2);
+    const hasCompacted = last.some((m) =>
+      m.content.some((b) => b.type === 'text' && b.text.includes('compacted')),
+    );
+    expect(hasCompacted).toBe(true);
   });
 });

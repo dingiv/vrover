@@ -5,4 +5,4 @@
  */
 export { PromptRegistry, prompts, render } from './registry.js';
 export type { PromptName, PromptVars } from './types.js';
-export { SYSTEM_PROMPT, STEP_TEMPLATE, NUDGE } from './constants.js';
+export { SYSTEM_PROMPT, STEP_TEMPLATE, NUDGE, COMPACT_TEMPLATE } from './constants.js';

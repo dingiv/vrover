@@ -1,4 +1,4 @@
-import { NUDGE, STEP_TEMPLATE, SYSTEM_PROMPT } from './constants.js';
+import { COMPACT_TEMPLATE, NUDGE, STEP_TEMPLATE, SYSTEM_PROMPT } from './constants.js';
 import type { PromptName, PromptVars } from './types.js';
 
 /**
@@ -37,6 +37,7 @@ export const prompts = new PromptRegistry({
   system: SYSTEM_PROMPT,
   step: STEP_TEMPLATE,
   nudge: NUDGE,
+  compact: COMPACT_TEMPLATE,
 });
 
 /** Convenience: render via the default {@link prompts} registry. */

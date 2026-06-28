@@ -35,3 +35,11 @@ export const STEP_TEMPLATE =
 
 /** Sent when the model talks but calls no tool. Variables: none. */
 export const NUDGE = 'Call one of the tools to continue, or call done.';
+
+/**
+ * Header for the compacted history of older steps, prepended to one action-line per step. The loop
+ * emits this once the verbatim window is exceeded — screenshots + element tables are dropped, only
+ * the per-step actions are retained. Variable: `{{steps}}` (newline-joined action lines).
+ */
+export const COMPACT_TEMPLATE =
+  'Earlier steps (compacted — screenshots + element tables omitted, actions retained):\n{{steps}}';

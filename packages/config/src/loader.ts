@@ -92,6 +92,8 @@ const ENV_MAP: [string[], string][] = [
   [['agent', 'iouThreshold'], 'IOU_THRESHOLD'],
   [['agent', 'debug'], 'AGENT_DEBUG'],
   [['agent', 'captureTimeoutMs'], 'CAPTURE_TIMEOUT_MS'],
+  [['agent', 'keepScreenshots'], 'KEEP_SCREENSHOTS'],
+  [['agent', 'contextWindow'], 'CONTEXT_WINDOW'],
 ];
 
 function setNested(obj: Record<string, unknown>, path: string[], value: unknown) {
@@ -117,7 +119,9 @@ function applyEnvOverrides(config: Record<string, unknown>): void {
       last === 'maxSteps' ||
       last === 'boxThreshold' ||
       last === 'iouThreshold' ||
-      last === 'captureTimeoutMs';
+      last === 'captureTimeoutMs' ||
+      last === 'keepScreenshots' ||
+      last === 'contextWindow';
     setNested(config, path, isNum ? Number(raw) : raw);
   }
 }

@@ -5,6 +5,8 @@
  * server through the standalone `@vrover/scout-client` SDK.
  */
 export { runAgent } from './loop.js';
+export { pruneForModel } from './context.js';
+export type { PruneOptions } from './context.js';
 export type {
   AgentOptions,
   TaskResult,

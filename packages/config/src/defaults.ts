@@ -42,5 +42,7 @@ export const DEFAULTS: VroverConfig = {
     iouThreshold: 0.1,
     debug: false,
     captureTimeoutMs: 30000,
+    keepScreenshots: 2,
+    contextWindow: 4,
   },
 };

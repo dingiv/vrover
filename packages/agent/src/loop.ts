@@ -6,6 +6,7 @@ import type { Platform } from '@vrover/platform';
 import type { SoMElement, SoMResult } from '@vrover/som';
 import { annotate, formatTable } from '@vrover/som';
 import { TOOL_DEFS, dispatch as defaultDispatch } from '@vrover/tools';
+import { pruneForModel } from './context.js';
 import { prompts } from './prompts/index.js';
 import type { AgentOptions, AgentStep, DispatchFn, StepAction, TaskResult } from './types.js';
 
@@ -28,6 +29,8 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
   const log = opts.log ?? (() => {});
   const debug = cfg.agent.debug;
   const maxSteps = opts.maxSteps ?? cfg.agent.maxSteps;
+  const contextWindow = opts.contextWindow ?? cfg.agent.contextWindow;
+  const keepScreenshots = opts.keepScreenshots ?? cfg.agent.keepScreenshots;
   const system = opts.systemPrompt ?? prompts.render('system');
   const tools = opts.tools ?? TOOL_DEFS;
   const runTool: DispatchFn = opts.dispatch ?? defaultDispatch;
@@ -61,7 +64,11 @@ export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
     // ── think ─────────────────────────────────────────────────────────────
     let resp;
     try {
-      resp = await opts.complete({ system, messages: history, tools });
+      resp = await opts.complete({
+        system,
+        messages: pruneForModel(history, { contextWindow, keepScreenshots }),
+        tools,
+      });
     } catch (err) {
       log(`LLM error: ${errMsg(err)}`);
       return { status: 'error', error: errMsg(err), steps };

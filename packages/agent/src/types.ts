@@ -57,6 +57,10 @@ export interface AgentOptions {
   dispatch?: DispatchFn;
   /** Max steps before giving up (default from config). */
   maxSteps?: number;
+  /** Recent steps kept verbatim before older turns are compacted (default from config). */
+  contextWindow?: number;
+  /** Max screenshots carried as image blocks (default from config). */
+  keepScreenshots?: number;
   /** Progress sink; defaults to no-op. The demo passes console.log. */
   log?: (message: string) => void;
   /**
