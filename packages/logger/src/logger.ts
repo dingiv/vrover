@@ -33,13 +33,23 @@ export interface Logger {
   child(name: string): Logger;
 }
 
-// --- live global defaults (env-derived once, mutable) ---
-let defaultLevel: LogLevel = parseLevel(process.env['LOG_LEVEL'], 'info');
-let defaultSink: LogSink = consoleSink;
+// --- live global defaults ---
+// Holders only — NOTHING is computed or opened at module load: no env read, no instance
+// creation, no file open. Both defaults resolve lazily on first use (the level from `LOG_LEVEL`,
+// like `loadConfig`), so importing this module can never crash its host before it has booted.
+let defaultLevel: LogLevel | undefined; // undefined = not yet resolved from LOG_LEVEL
+let defaultSink: LogSink | undefined; // undefined = not yet resolved (→ consoleSink)
+
+function resolveDefaultLevel(): LogLevel {
+  return (defaultLevel ??= parseLevel(process.env['LOG_LEVEL'], 'info'));
+}
+function resolveDefaultSink(): LogSink {
+  return (defaultSink ??= consoleSink);
+}
 
 /** The current global default level (used by loggers without an explicit level). */
 export function getDefaultLevel(): LogLevel {
-  return defaultLevel;
+  return resolveDefaultLevel();
 }
 
 /** Reconfigure the global default level — applies live to loggers without an explicit level. */
@@ -49,7 +59,7 @@ export function setDefaultLevel(level: LogLevel): void {
 
 /** The current global default sink. */
 export function getDefaultSink(): LogSink {
-  return defaultSink;
+  return resolveDefaultSink();
 }
 
 /** Reconfigure the global default sink — applies live to loggers without an explicit sink. */
@@ -63,8 +73,8 @@ function makeLogger(name: string, opts: LoggerOptions): Logger {
   let levelOverride: LogLevel | undefined = opts.level;
   let sinkOverride: LogSink | undefined = opts.sink;
 
-  const effectiveLevel = (): LogLevel => levelOverride ?? defaultLevel;
-  const effectiveSink = (): LogSink => sinkOverride ?? defaultSink;
+  const effectiveLevel = (): LogLevel => levelOverride ?? resolveDefaultLevel();
+  const effectiveSink = (): LogSink => sinkOverride ?? resolveDefaultSink();
 
   const emit = (level: LogLevel, message: string, args: unknown[]): void => {
     if (!enabledFor(effectiveLevel(), level)) return;
@@ -106,5 +116,12 @@ export function createLogger(name: string, options: LoggerOptions = {}): Logger 
   return makeLogger(name, options);
 }
 
-/** Convenience top-level logger. */
-export const rootLogger: Logger = createLogger('vrover');
+let _rootLogger: Logger | undefined;
+
+/**
+ * Lazily-created, cached top-level logger (`vrover`). Created on first call rather than at module
+ * load — same lifecycle as `loadConfig`, so importing `@vrover/logger` performs no work.
+ */
+export function getRootLogger(): Logger {
+  return (_rootLogger ??= createLogger('vrover'));
+}

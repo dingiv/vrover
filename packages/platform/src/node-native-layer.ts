@@ -20,8 +20,11 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import type { Screenshot, UiElement } from './types.js';
 import type { NativeLayer } from './desktop.js';
+import { createLogger } from '@vrover/logger';
 
 const require = createRequire(import.meta.url);
+
+const logger = createLogger('platform/desktop');
 
 // ── placeholder PNG (1×1 pixel, grey) ────────────────────────────────────────
 // Minimal valid PNG for when no display server is available.
@@ -248,9 +251,8 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
     if (this._input === undefined) {
       this._input = tryCreateInputSink();
       if (!this._input) {
-        console.error(
-          '[desktop] Native input not available (no /dev/uinput?). ' +
-          'Actions will be logged but not executed.',
+        logger.warn(
+          'Native input not available (no /dev/uinput?). Actions will be logged but not executed.',
         );
       }
     }
@@ -261,10 +263,9 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
     if (this._capture === undefined) {
       this._capture = tryCreateCapture();
       if (!this._capture) {
-        console.error(
-          '[desktop] Native capture not available (.node built without the ' +
-          '`capture` feature, or no graphical session). ' +
-          'Falling back to the capture_one binary / X11.',
+        logger.warn(
+          'Native capture not available (.node built without the `capture` feature, or no ' +
+            'graphical session). Falling back to the capture_one binary / X11.',
         );
       }
     }
@@ -282,10 +283,7 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
         const { width, height } = readPngSize(png);
         return { width, height, png };
       } catch (e) {
-        console.error(
-          '[desktop] napi capture failed, falling back:',
-          e instanceof Error ? e.message : e,
-        );
+        logger.warn('napi capture failed, falling back:', e instanceof Error ? e.message : e);
       }
     }
     // 2. capture_one binary (PipeWire) — proven one-shot fallback.
@@ -300,7 +298,7 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
       const { width, height } = readPngSize(x);
       return { width, height, png: x };
     }
-    console.error('[desktop] Screen capture not available — using placeholder image.');
+    logger.error('Screen capture not available — using placeholder image.');
     return captureFallback();
   }
 
@@ -310,7 +308,7 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
     if (this.input()) {
       this.input()!.click(Math.round(x), Math.round(y), 'left');
     } else {
-      console.log(`[desktop] would click at (${Math.round(x)}, ${Math.round(y)})`);
+      logger.info(`would click at (${Math.round(x)}, ${Math.round(y)})`);
     }
   }
 
@@ -318,7 +316,7 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
     if (this.input()) {
       this.input()!.typeText(text);
     } else {
-      console.log(`[desktop] would type: "${text}"`);
+      logger.info(`would type: "${text}"`);
     }
   }
 
@@ -331,7 +329,7 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
     if (this.input()) {
       this.input()!.scroll(Math.round(x), Math.round(y), 0, dy);
     } else {
-      console.log(`[desktop] would scroll ${direction} at (${Math.round(x)}, ${Math.round(y)})`);
+      logger.info(`would scroll ${direction} at (${Math.round(x)}, ${Math.round(y)})`);
     }
   }
 
@@ -356,7 +354,7 @@ export class DesktopNativeLayerAdapter implements NativeLayer {
         }
       }
     } else {
-      console.log(`[desktop] would press: "${keys}"`);
+      logger.info(`would press: "${keys}"`);
     }
   }
 

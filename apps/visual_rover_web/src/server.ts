@@ -30,11 +30,16 @@ import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { loadConfig } from '@vrover/config';
 import type { VroverConfig } from '@vrover/config';
 import type { Platform } from '@vrover/platform';
+import { createLogger } from '@vrover/logger';
 import { AgentService } from './service.js';
 import { MemoryTaskStore } from './store.js';
 import { createRoutes } from './routes.js';
 import { createPlatform, PLATFORM_NAMES } from './agent.js';
 import type { PlatformName } from './agent.js';
+
+// Lifecycle/diagnostic output goes through the unified logger; CLI help (--help), the startup
+// banner, and arg-validation errors stay raw `console` (conventional, formatted user output).
+const logger = createLogger('web/server');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, '..');
@@ -200,7 +205,7 @@ async function main(): Promise<void> {
     try {
       await readFile(path.join(WEB_DIST, 'index.html'));
     } catch {
-      console.error(`No built SPA at ${WEB_DIST}. Run \`pnpm rover:web:build\` (vite build) first.`);
+      logger.error(`No built SPA at ${WEB_DIST}. Run \`pnpm rover:web:build\` (vite build) first.`);
       process.exit(1);
     }
   }
@@ -211,7 +216,7 @@ async function main(): Promise<void> {
     maxSteps,
     platform,
     platformName,
-    log: (line) => console.log(line),
+    log: (line) => logger.info(line),
   });
 
   console.log('\n  open  http://%s:%d', server.host, server.port);
@@ -221,7 +226,7 @@ async function main(): Promise<void> {
   console.log('\nPress Ctrl+C to stop.');
 
   const shutdown = async (sig: string) => {
-    console.log(`\n${sig} received, shutting down…`);
+    logger.info(`${sig} received, shutting down…`);
     await server.close();
     process.exit(0);
   };

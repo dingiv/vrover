@@ -293,6 +293,9 @@ importers:
       '@vrover/llm':
         specifier: workspace:*
         version: link:../../packages/llm
+      '@vrover/logger':
+        specifier: workspace:*
+        version: link:../../packages/logger
       '@vrover/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -379,6 +382,9 @@ importers:
       '@vrover/llm':
         specifier: workspace:*
         version: link:../llm
+      '@vrover/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@vrover/native':
         specifier: workspace:*
         version: link:../native
@@ -422,6 +428,9 @@ importers:
       '@napi-rs/canvas':
         specifier: ^1.0.0
         version: 1.0.0
+      '@vrover/logger':
+        specifier: workspace:*
+        version: link:../logger
       '@vrover/scout-protocol':
         specifier: workspace:*
         version: link:../scout-protocol

@@ -11,6 +11,9 @@ import type { Platform } from '@vrover/platform';
 import { runAgentTask, createStreamingTask } from './agent.js';
 import { MemoryTaskStore, newTaskRecord } from './store.js';
 import type { TaskRecord, TaskStore } from './store.js';
+import { createLogger } from '@vrover/logger';
+
+const logger = createLogger('web/service');
 
 export type { TaskRecord, TaskStore } from './store.js';
 
@@ -49,6 +52,7 @@ export class AgentService {
       log = out.log;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      logger.error('task failed', { goal, error: msg });
       result = { status: 'error', error: msg, steps: [] };
       log = [`Error: ${msg}`];
     }
@@ -80,19 +84,20 @@ export class AgentService {
 
     task.on((ev: TaskEvent) => {
       sink(ev);
-      this.applyEvent(rec, ev);
+      this.applyEvent(rec, ev);   // TODO: 调用这个，然后还要把执行结果返回给前端
     });
 
     try {
       await task.run({ maxSteps });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      logger.error('streaming task failed', { goal, error: msg });
       const errorEvent: TaskEvent = {
         type: 'error',
         result: { status: 'error', error: msg, steps: [...task.steps] },
       };
       sink(errorEvent);
-      this.applyEvent(rec, errorEvent);
+      this.applyEvent(rec, errorEvent);   // TODO: 调用这个，然后还要把执行结果返回给前端
     }
 
     rec.status = rec.result?.status ?? 'error';

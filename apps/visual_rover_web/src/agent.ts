@@ -8,6 +8,10 @@ import { DesktopPlatform, DesktopNativeLayerAdapter } from '@vrover/platform';
 import type { Platform } from '@vrover/platform';
 import { loadConfig as loadVroverConfig } from '@vrover/config';
 import type { VroverConfig } from '@vrover/config';
+import { createLogger } from '@vrover/logger';
+
+/** Unified logger for the web app's agent progress trace. */
+const webLogger = createLogger('web/agent');
 
 /**
  * Selectable platform backends — the same three the CLI exposes.
@@ -82,6 +86,7 @@ export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentT
     debug: agentCfg.debug,
     log: (line: string) => {
       log.push(line);
+      webLogger.debug(line); // tee into the unified server logger (visible at LOG_LEVEL=debug)
     },
   });
 

@@ -14,6 +14,7 @@
     "@vrover/agent": "workspace:*",
     "@vrover/config": "workspace:*",
     "@vrover/llm": "workspace:*",
+    "@vrover/logger": "workspace:*",
     "@vrover/platform": "workspace:*",
     "@vrover/providers": "workspace:*",
     "koa": "^2.15.4",

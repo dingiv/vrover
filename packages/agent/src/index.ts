@@ -5,7 +5,7 @@
  * server through the standalone `@vrover/scout-client` SDK.
  */
 export { runAgent } from './loop.js';
-export { createAgent } from './agent.js';
+export { createAgent, getAgentLogger } from './agent.js';
 export { FileMemoryManager } from './memory.js';
 export { pruneForModel, turnBoundaries } from './context.js';
 export type { PruneOptions } from './context.js';

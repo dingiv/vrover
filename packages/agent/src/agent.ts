@@ -7,6 +7,7 @@ import { TOOL_DEFS, dispatch as defaultDispatch } from '@vrover/tools';
 import { pruneForModel, turnBoundaries } from './context.js';
 import { prompts } from './prompts/index.js';
 import { act, errMsg, observe } from './step.js';
+import { createLogger, type Logger } from '@vrover/logger';
 import type {
   Agent,
   AgentDeps,
@@ -20,6 +21,18 @@ import type {
   TaskResult,
   TaskSnapshot,
 } from './types.js';
+
+// The brain's logger is created lazily on first use and cached for the process — the same
+// lifecycle as `loadConfig()` (`@vrover/config`): deferred from module init, then one shared object.
+let _agentLogger: Logger | undefined;
+
+/**
+ * Lazily-created, cached logger for the brain's progress trace (the default {@link AgentDeps.log}
+ * sink). Created on first call rather than at module load, mirroring {@link loadConfig}.
+ */
+export function getAgentLogger(): Logger {
+  return (_agentLogger ??= createLogger('agent'));
+}
 
 /**
  * Resolved collaborators + config + memory — the shared "brain". `createAgent` builds it (the one
@@ -56,7 +69,10 @@ export function createAgent(deps: AgentDeps): Agent {
     nativeParser: deps.nativeParser,
     tools: deps.tools ?? TOOL_DEFS,
     system: deps.systemPrompt ?? prompts.render('system'),
-    log: deps.log ?? (() => {}),
+    // Default sink routes the brain's progress trace through the unified logger at `debug`, so it
+    // is silent under the default `info` threshold (tests stay quiet) but lights up at
+    // `LOG_LEVEL=debug`. Callers wanting a user-facing stream (e.g. the web UI) inject their own.
+    log: deps.log ?? ((msg: string) => getAgentLogger().debug(msg)),
     contextWindow: deps.contextWindow ?? 4,
     keepScreenshots: deps.keepScreenshots ?? 2,
     captureTimeoutMs: deps.captureTimeoutMs ?? 30000,

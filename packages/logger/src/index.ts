@@ -15,7 +15,7 @@ export { consoleSink, arraySink } from './sink.js';
 export type { Logger, LoggerOptions } from './logger.js';
 export {
   createLogger,
-  rootLogger,
+  getRootLogger,
   getDefaultLevel,
   setDefaultLevel,
   getDefaultSink,

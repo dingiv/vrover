@@ -5,6 +5,7 @@ import {
   createLogger,
   enabledFor,
   getDefaultLevel,
+  getRootLogger,
   parseLevel,
   setDefaultLevel,
   setDefaultSink,
@@ -150,8 +151,24 @@ describe('child loggers', () => {
   });
 });
 
+describe('getRootLogger', () => {
+  it('is lazily created and cached (memoized singleton)', () => {
+    const a = getRootLogger();
+    const b = getRootLogger();
+    expect(a).toBe(b); // same reference — created once, then reused
+    expect(a.name).toBe('vrover');
+  });
+
+  it('routes through the live global default sink like any logger', () => {
+    const { sink, records } = arraySink();
+    setDefaultSink(sink);
+    getRootLogger().info('root line');
+    expect(records[0]!.name).toBe('vrover');
+  });
+});
+
 describe('default level from env', () => {
-  it('reads LOG_LEVEL once at import', async () => {
+  it('resolves LOG_LEVEL lazily on first read', async () => {
     process.env['LOG_LEVEL'] = 'debug';
     vi.resetModules();
     const mod = await import('@vrover/logger');
