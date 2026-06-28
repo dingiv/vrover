@@ -2,7 +2,7 @@
 
 VRover 是一个面向 GUI 操作场景的视觉 AI agent：用 **Set-of-Mark (SoM)** 让模型「看见并定位」UI 元素，通过统一的 `Platform` 抽象驱动桌面或浏览器完成自动化任务。
 
-> 📐 文档导航：[architecture.md](./architecture.md) 现状架构（代码为准） · [scout-server.md](./scout-server.md) Visual Scout server · [design.md](./design.md) 长期构想 · [decisions.md](./decisions.md) 设计决策（含节点身份方案） · [som.md](./som.md) SoM 感知模块。
+> 📐 文档导航：[architecture.md](./architecture.md) 现状架构（代码为准） · [scout-server.md](./scout-server.md) Visual Scout server · [design.md](./design.md) 长期构想 · [decisions.md](./decisions.md) 设计决策（含节点身份方案） · [som.md](./som.md) SoM 感知模块 · [ui-tars/](./ui-tars/README.md) 借鉴 UI-TARS(-desktop) 的待办清单（带源码出处）。
 
 ## 架构
 

@@ -63,6 +63,11 @@ apps/{visual_scout,visual_rover_cli,visual_rover_web,visual_scout_devtools}  ←
 
 **Authoritative docs (in Chinese, "代码为准" = code is source of truth):** `docs/architecture.md` (as-built), `docs/design.md` (long-term vision: UI-graph walker), `docs/decisions.md` (open decisions D1–D11), `docs/scout-server.md` (Scout protocol/server), `docs/som.md`. The graph-walker/graph-map (`Walker`/`GraphMap` in `@vrover/scout`) are deliberate empty placeholders pending D1/D2.
 
+## Design principles
+
+- **Composition over inheritance.** The brain's pieces are *composed* — injected collaborators behind small interfaces — never assembled into a class hierarchy. An `Agent` composes a `Platform`, a `CompleteFn` (the single LLM exit point), a `DispatchFn` (tool executor), an optional `NativeParser`, tools, prompts, and a `MemoryManager`. Adding a target / provider / toolset / persistence backend = adding one implementation of the relevant interface, not a subclass. `Agent` is itself a **factory** for `Task`s: it holds collaborators + resolved config (+ memory) and *no* per-conversation state, so one Agent drives many independent tasks — the shape a multi-agent architecture needs. A `Task` owns one conversation's lifecycle (history/steps/status + `run`/`exec`/`goto`/`pause`) and composes that same shared brain.
+- **Pure core, impure shell (side-effect separation).** Constructors are pure — no I/O. Config reading (`createAgent` calls `loadConfig`), filesystem I/O (`FileMemoryManager`), and all OS/network access (`Platform`, the LLM `complete`) live in factory functions and the injectable collaborators, never in the core. The core — `observe`/`act` (`step.ts`), `pruneForModel` (`context.ts`), the `Task` state machine — stays pure-ish and unit-testable with fakes. This is why the whole observe→think→act loop runs **key-free / network-free** in tests.
+
 ## Conventions & gotchas
 
 - **ESM + NodeNext:** every relative import needs a `.js` extension (e.g. `import { runAgent } from './loop.js'`), even for `.ts` files. tsx/vitest resolve these to the TS source.
