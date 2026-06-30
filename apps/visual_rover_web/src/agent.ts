@@ -10,7 +10,7 @@ import { loadConfig as loadVroverConfig } from '@vrover/config';
 import type { VroverConfig } from '@vrover/config';
 import { createLogger } from '@vrover/logger';
 
-/** Unified logger for the web app's agent progress trace. */
+/** Tee point for the agent loop's progress lines into the unified server logger. */
 const webLogger = createLogger('web/agent');
 
 /**

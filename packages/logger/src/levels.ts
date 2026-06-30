@@ -1,7 +1,10 @@
-/** Severity-ordered log levels. `silent` is a threshold that suppresses everything. */
+/**
+ * Severity-ordered log levels. `trace` is the most verbose, `fatal` the most severe;
+ * `silent` is a threshold that suppresses everything.
+ */
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
 
-/** All levels, lowest → highest severity. */
+/** All level names (lowest → highest severity), for parsing/validation. */
 export const LOG_LEVELS: readonly LogLevel[] = [
   'trace',
   'debug',

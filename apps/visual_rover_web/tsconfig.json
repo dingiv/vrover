@@ -11,22 +11,25 @@
   ],
   "references": [
     {
-      "path": "../../packages/logger"
+      "path": "./tsconfig.web.json"
     },
-    {
-      "path": "../../packages/agent"
-    },
-    {
-      "path": "../../packages/config"
-    },
-    {
-      "path": "../../packages/llm"
-    },
-    {
-      "path": "../../packages/platform"
-    },
-    {
-      "path": "../../packages/providers"
-    }
+    // {
+    //   "path": "../../packages/logger"
+    // },
+    // {
+    //   "path": "../../packages/agent"
+    // },
+    // {
+    //   "path": "../../packages/config"
+    // },
+    // {
+    //   "path": "../../packages/llm"
+    // },
+    // {
+    //   "path": "../../packages/platform"
+    // },
+    // {
+    //   "path": "../../packages/providers"
+    // }
   ]
 }

@@ -30,7 +30,7 @@ import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { loadConfig } from '@vrover/config';
 import type { VroverConfig } from '@vrover/config';
 import type { Platform } from '@vrover/platform';
-import { createLogger } from '@vrover/logger';
+import { createLogger, Logger } from '@vrover/logger';
 import { AgentService } from './service.js';
 import { MemoryTaskStore } from './store.js';
 import { createRoutes } from './routes.js';
@@ -39,7 +39,6 @@ import type { PlatformName } from './agent.js';
 
 // Lifecycle/diagnostic output goes through the unified logger; CLI help (--help), the startup
 // banner, and arg-validation errors stay raw `console` (conventional, formatted user output).
-const logger = createLogger('web/server');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_DIR = path.resolve(__dirname, '..');
@@ -88,7 +87,7 @@ interface ServerOptions {
   platform: Platform;
   /** Backend name, for logging. */
   platformName: PlatformName;
-  log: (line: string) => void;
+  logger: Logger;
 }
 
 interface WebHandle {
@@ -101,6 +100,7 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
   // ── wire layers: store → service → routes ───────────────────────────────
   const store = new MemoryTaskStore();
   const service = new AgentService(store, opts.platform);
+  const log = opts.logger.info
   const routes = createRoutes(service, isDev);
 
   const app = new Koa();
@@ -137,10 +137,10 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
     });
   }
 
-  opts.log(`VRover web server listening on http://${opts.host}:${opts.port} (${isDev ? 'dev' : 'prod'})`);
-  opts.log(`  platform: ${opts.platformName}`);
-  if (isDev) opts.log(`  Vite middleware + HMR (root: ${APP_DIR})`);
-  else opts.log(`  serving ${WEB_DIST}`);
+  log(`VRover web server listening on http://${opts.host}:${opts.port} (${isDev ? 'dev' : 'prod'})`);
+  log(`  platform: ${opts.platformName}`);
+  if (isDev) log(`  Vite middleware + HMR (root: ${APP_DIR})`);
+  else log(`  serving ${WEB_DIST}`);
 
   return {
     host: opts.host,
@@ -196,6 +196,7 @@ async function main(): Promise<void> {
   const host = values.host ?? '127.0.0.1';
   const port = parsePort(values.port ?? '8080');
   const maxSteps = values['max-steps'] ? parseUint(values['max-steps'], '--max-steps') : undefined;
+  const logger = createLogger('web/server');
 
   const platformName = parsePlatformName(values.platform);
   const cfg = loadConfig(buildScoutOverrides(values));
@@ -216,7 +217,7 @@ async function main(): Promise<void> {
     maxSteps,
     platform,
     platformName,
-    log: (line) => logger.info(line),
+    logger,
   });
 
   console.log('\n  open  http://%s:%d', server.host, server.port);

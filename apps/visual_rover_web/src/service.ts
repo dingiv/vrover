@@ -11,26 +11,35 @@ import type { Platform } from '@vrover/platform';
 import { runAgentTask, createStreamingTask } from './agent.js';
 import { MemoryTaskStore, newTaskRecord } from './store.js';
 import type { TaskRecord, TaskStore } from './store.js';
-import { createLogger } from '@vrover/logger';
+import { createLogger, Logger } from '@vrover/logger';
 
-const logger = createLogger('web/service');
 
 export type { TaskRecord, TaskStore } from './store.js';
 
 export class AgentService {
+
+
+  // TODO: AgentService 需要持有 Agent 对象实例
+  // private agent : Agent
+
+  logger: Logger
+
   /**
    * @param store  persistence layer
    * @param platform  the single target every task drives; defaults to an in-memory
    *   {@link MockPlatform}. Selected at boot (see `createPlatform` in `./agent.js`).
-   */
+  */
   constructor(
     private readonly store: TaskStore,
     private readonly platform: Platform = new MockPlatform(),
-  ) {}
+  ) {
+    this.logger = createLogger('web/service');
+  }
 
   /** Convenience: new service with an in-memory store + the default mock platform. */
   static create(): AgentService {
-    return new AgentService(new MemoryTaskStore());
+    const svc = new AgentService(new MemoryTaskStore());
+    return svc
   }
 
   // ── one-shot ──────────────────────────────────────────────────────────────
@@ -45,14 +54,14 @@ export class AgentService {
 
     let result: TaskResult;
     let log: string[];
-    
+
     try {
       const out = await runAgentTask({ task: goal, maxSteps, platform: this.platform });
       result = out.result;
       log = out.log;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error('task failed', { goal, error: msg });
+      this.logger.error('task failed', { goal, error: msg });
       result = { status: 'error', error: msg, steps: [] };
       log = [`Error: ${msg}`];
     }
@@ -85,13 +94,13 @@ export class AgentService {
     task.on((ev: TaskEvent) => {
       sink(ev);
       this.applyEvent(rec, ev);   // TODO: 调用这个，然后还要把执行结果返回给前端
-    });
+    });   // FIXME: 谁来调用 task.off 方法？
 
     try {
       await task.run({ maxSteps });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error('streaming task failed', { goal, error: msg });
+      this.logger.error('streaming task failed', { goal, error: msg });
       const errorEvent: TaskEvent = {
         type: 'error',
         result: { status: 'error', error: msg, steps: [...task.steps] },

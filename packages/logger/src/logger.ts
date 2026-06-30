@@ -40,9 +40,12 @@ export interface Logger {
 let defaultLevel: LogLevel | undefined; // undefined = not yet resolved from LOG_LEVEL
 let defaultSink: LogSink | undefined; // undefined = not yet resolved (→ consoleSink)
 
+/** Resolve the global default level from `LOG_LEVEL` on first use and cache it. */
 function resolveDefaultLevel(): LogLevel {
   return (defaultLevel ??= parseLevel(process.env['LOG_LEVEL'], 'info'));
 }
+
+/** Resolve the global default sink on first use (→ consoleSink) and cache it. */
 function resolveDefaultSink(): LogSink {
   return (defaultSink ??= consoleSink);
 }
