@@ -1,10 +1,10 @@
 /**
  * visual-rover-cli — the VRover GUI agent CLI (the "brain", one-shot front end).
  *
- *   pnpm rover:cli                                                  # interactive prompt, mock platform
- *   pnpm rover:cli -- --task "log in"                               # one-shot, mock platform
- *   pnpm rover:cli -- --platform mock --provider glm --task "log in"
- *   pnpm rover:desktop                                              # = rover:cli --platform desktop
+ *   pnpm --filter @vrover/visual-rover-cli start                       # interactive prompt, mock platform
+ *   pnpm --filter @vrover/visual-rover-cli start -- --task "log in"    # one-shot, mock platform
+ *   pnpm --filter @vrover/visual-rover-cli start -- --platform mock --provider glm --task "log in"
+ *   pnpm --filter @vrover/visual-rover-cli start:desktop               # = start --platform desktop
  *
  * Config priority: defaults < /etc/vrover.conf < ~/.vrover/vrover.conf <
  *                  ./vrover.conf < env vars < CLI args

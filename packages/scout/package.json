@@ -12,10 +12,14 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "example": "tsx src/examples/scout-server.ts"
   },
   "dependencies": {
     "@vrover/platform": "workspace:*",
     "@vrover/scout-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
   }
 }

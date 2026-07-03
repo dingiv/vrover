@@ -10,6 +10,8 @@
   },
   "scripts": {
     "start": "tsx src/main.ts",
+    "start:mock": "tsx src/main.ts --platform mock",
+    "start:desktop": "tsx src/main.ts --platform desktop",
     "build": "tsc"
   },
   "dependencies": {

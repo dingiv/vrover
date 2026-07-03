@@ -6,10 +6,10 @@
  * terminal. Needs no API key — it only exposes UI operations over the custom TCP
  * protocol.
  *
- *   pnpm scout:app                                  # defaults (multi-screen on SCOUT_HOST:SCOUT_PORT)
- *   pnpm scout:app -- --host 0.0.0.0 --port 9000    # bind publicly on 9000
- *   pnpm scout:app -- --backend mock                # use the single-screen mock
- *   pnpm scout:app -- --devtools-port 7881          # also expose the browser devtools service
+ *   pnpm --filter @vrover/visual-scout start                                  # defaults (multi-screen on SCOUT_HOST:SCOUT_PORT)
+ *   pnpm --filter @vrover/visual-scout start -- --host 0.0.0.0 --port 9000    # bind publicly on 9000
+ *   pnpm --filter @vrover/visual-scout start -- --backend mock                # use the single-screen mock
+ *   pnpm --filter @vrover/visual-scout start -- --devtools-port 7881          # also expose the browser devtools service
  *
  * Host/port default to `SCOUT_HOST`/`SCOUT_PORT` (then `127.0.0.1` / `7878`), mirroring
  * the server itself. A client may also hint a backend in its handshake; see
@@ -93,7 +93,7 @@ async function run(opts: {
   console.log(`\nVisual Scout server ready at ${server.host}:${server.port} (TCP, custom binary protocol)`);
   console.log(`  default backend: ${defaultBackend}  (handshake 'backend' hint can override per client)`);
   if (server.devtools) {
-    console.log(`  devtools service: http://${server.devtools.host}:${server.devtools.port}  (open with: pnpm devtools -- --api http://${server.devtools.host}:${server.devtools.port})`);
+    console.log(`  devtools service: http://${server.devtools.host}:${server.devtools.port}  (open with: pnpm --filter @vrover/visual-scout-devtools dev -- --api http://${server.devtools.host}:${server.devtools.port})`);
   }
   console.log('\nPress Ctrl+C to stop.');
 
@@ -118,7 +118,7 @@ function parsePort(raw: string): number {
   return n;
 }
 
-/** `pnpm scout:app -- <args>` forwards a literal `--`; drop a leading one so flags parse. */
+/** `pnpm --filter @vrover/visual-scout start -- <args>` forwards a literal `--`; drop a leading one so flags parse. */
 function forwardedArgs(): string[] {
   const args = process.argv.slice(2);
   return args.length > 0 && args[0] === '--' ? args.slice(1) : args;

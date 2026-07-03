@@ -208,7 +208,7 @@ async function main(): Promise<void> {
     try {
       await readFile(path.join(WEB_DIST, 'index.html'));
     } catch {
-      logger.error(`No built SPA at ${WEB_DIST}. Run \`pnpm rover:web:build\` (vite build) first.`);
+      logger.error(`No built SPA at ${WEB_DIST}. Run \`pnpm --filter @vrover/visual-rover-web build:web\` (vite build) first.`);
       process.exit(1);
     }
   }

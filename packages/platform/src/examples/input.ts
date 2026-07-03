@@ -1,8 +1,8 @@
 /**
  * desktop input example — create ONE {@link DesktopPlatform} and inject keyboard + mouse actions.
  *
- *   pnpm desktop:input
- *   pnpm exec tsx packages/platform/src/examples/input.ts
+ *   pnpm --filter @vrover/platform example:input
+ *   pnpm example:input   # from packages/platform/
  *
  * Drives the real input layer ({@link DesktopNativeLayerAdapter} → uinput via the napi `.node`):
  * click, type, key combos, and scroll. Each step is logged and spaced with a short delay so a

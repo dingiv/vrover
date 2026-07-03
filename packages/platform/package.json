@@ -12,11 +12,17 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "example:capture": "tsx src/examples/capture.ts",
+    "example:input": "tsx src/examples/input.ts",
+    "example:demo": "tsx src/examples/desktop-demo.ts"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
     "@vrover/logger": "workspace:*",
     "@vrover/scout-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
   }
 }

@@ -1,11 +1,11 @@
 /**
  * CLI entry — wires config → provider → platform → native parser → agent loop.
  *
- *   pnpm rover:cli -- --task "click the login button"
- *   pnpm rover:cli -- --platform mock --provider glm --task "log in"
- *   pnpm rover:cli -- --platform remote --scout-port 9000
- *   pnpm rover:desktop                              # = rover:cli --platform desktop
- *   pnpm rover:cli -- --platform desktop --yolo-path weights/icon_detect.onnx
+ *   pnpm --filter @vrover/visual-rover-cli start -- --task "click the login button"
+ *   pnpm --filter @vrover/visual-rover-cli start -- --platform mock --provider glm --task "log in"
+ *   pnpm --filter @vrover/visual-rover-cli start -- --platform remote --scout-port 9000
+ *   pnpm --filter @vrover/visual-rover-cli start:desktop               # = start --platform desktop
+ *   pnpm --filter @vrover/visual-rover-cli start -- --platform desktop --yolo-path weights/icon_detect.onnx
  */
 import readline from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';

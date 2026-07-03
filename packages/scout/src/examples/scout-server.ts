@@ -1,7 +1,7 @@
 /**
  * Start the Visual Scout server as a standalone process and keep it running.
  *
- *   pnpm scout            # uses SCOUT_HOST / SCOUT_PORT (default 127.0.0.1:7878)
+ *   pnpm --filter @vrover/scout example   # uses SCOUT_HOST / SCOUT_PORT (default 127.0.0.1:7878)
  *
  * The server needs no API key — it only exposes UI operations + grounding over a
  * custom TCP protocol. Each connecting client handshakes and gets its own session

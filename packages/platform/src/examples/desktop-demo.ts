@@ -2,8 +2,8 @@
  * desktop demo — create ONE {@link DesktopPlatform}, then capture → act → re-capture
  * (a hand-driven observe→act→observe).
  *
- *   pnpm desktop:demo
- *   pnpm exec tsx packages/platform/src/examples/desktop-demo.ts
+ *   pnpm --filter @vrover/platform example:demo
+ *   pnpm example:demo   # from packages/platform/
  *
  * The same single {@link DesktopPlatform} instance is reused across captures AND input: grab a
  * "before" frame, run a short scripted sequence (open Activities, search, submit), then grab an

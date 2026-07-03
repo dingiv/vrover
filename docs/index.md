@@ -37,16 +37,16 @@ agent loop（observe → think → act）
 pnpm install
 cp .env.example .env          # 填入 ANTHROPIC_API_KEY
 pnpm test                     # 单测 + 注入假 LLM 的 loop 集成测试（无需 key）
-pnpm dev                      # 跑 examples/mock-run.ts：agent 对合成登录界面完成登录
-pnpm scout                    # 起 Visual Scout TCP server（无需 key，自定义二进制协议）
-pnpm scout:run                # 起 server + 大脑经 RemotePlatform 驱动它（需 key）
-pnpm scout:client             # 起 server + 用 ScoutClient SDK 脚本驱动登录（无需 key）
-pnpm scout:app                # 起独立 Visual Scout server 应用（CLI：--host/--port/--backend；无需 key）
-pnpm rover:cli -- --task "..."            # CLI 一次性跑一个任务（mock/remote/desktop 平台；跑任务需 key）
-pnpm rover:web                            # 起 VRover web 应用：koa 同进程托管 React SPA + /api（dev 挂 Vite 中间件带 HMR；跑任务需 key）
-pnpm rover:web:build && pnpm rover:web:start  # 生产：先 vite build 出 web-dist，再由 koa 静态托管
-pnpm scout:app -- --devtools-port 7881       # scout 同时暴露浏览器 devtools 服务（HTTP/SSE，复用 session）
-pnpm devtools                                 # 起 Scout DevTools web UI（Vue3/Vite 客户端渲染；Vite 代理 /api → scout）
+pnpm typecheck                # 全仓 tsc --noEmit
+pnpm build                    # 全仓 tsc --build（产出各包 dist/）
+# 各子包入口用 `pnpm --filter @vrover/<name> <script>` 调用：
+pnpm --filter @vrover/scout example                          # 起 Visual Scout TCP server 示例（无需 key，自定义二进制协议）
+pnpm --filter @vrover/visual-scout start                     # 起独立 Visual Scout server 应用（CLI：--host/--port/--backend；无需 key）
+pnpm --filter @vrover/visual-rover-cli start:mock -- --task "..."   # CLI 一次性跑一个任务（跑任务需 key）
+pnpm --filter @vrover/visual-rover-web dev                   # 起 VRover web 应用：koa 同进程托管 React SPA + /api（dev 挂 Vite 中间件带 HMR；跑任务需 key）
+pnpm --filter @vrover/visual-rover-web build:web && pnpm --filter @vrover/visual-rover-web start  # 生产：先 vite build 出 web-dist，再由 koa 静态托管
+pnpm --filter @vrover/visual-scout start -- --devtools-port 7881   # scout 同时暴露浏览器 devtools 服务（HTTP/SSE，复用 session）
+pnpm --filter @vrover/visual-scout-devtools dev              # 起 Scout DevTools web UI（Vue3/Vite 客户端渲染；Vite 代理 /api → scout）
 ```
 
 ## 目录

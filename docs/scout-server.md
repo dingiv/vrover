@@ -88,15 +88,16 @@ connect TCP
 
 ```bash
 pnpm install
-pnpm scout                       # 起 server（无需 API key），监听 SCOUT_HOST:SCOUT_PORT（默认 127.0.0.1:7878）
+pnpm --filter @vrover/scout example   # 起 server（无需 API key），监听 SCOUT_HOST:SCOUT_PORT（默认 127.0.0.1:7878）
 ```
 
 > 注意：这是 **TCP** server，**不能 curl**。`pnpm test`（无需 key）即端到端验证：握手 / 截图 / 元素 / 登录 / 会话隔离 / 错误。
 
 ```bash
-# 端到端：起 server + 用真 Anthropic 大脑经 RemotePlatform 驱动它
+# 端到端：先用 @vrover/scout 起 server，再用 CLI 经 RemotePlatform 驱动它（大脑需 key）
 cp .env.example .env             # 填 ANTHROPIC_API_KEY（大脑需要；server 不需要）
-pnpm scout:run
+pnpm --filter @vrover/scout example                                              # 终端 1：起 server
+pnpm --filter @vrover/visual-rover-cli start -- --platform remote --task "..."   # 终端 2：大脑驱动
 ```
 
 host/port 由 `SCOUT_HOST` / `SCOUT_PORT` 控制（server 直接读环境变量，**不**走 `loadConfig()`，所以无 API key 也能跑）。

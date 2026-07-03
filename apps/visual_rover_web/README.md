@@ -20,9 +20,9 @@ client code can read them; `NODE_ENV` is the one switch both sides honour.
 ## Usage
 
 ```bash
-pnpm rover:web          # dev: koa + Vite middleware + HMR, http://127.0.0.1:8080
-pnpm rover:web:build    # vite build → web-dist/
-pnpm rover:web:start    # prod: koa serves web-dist/ + API
+pnpm --filter @vrover/visual-rover-web dev          # dev: koa + Vite middleware + HMR, http://127.0.0.1:8080
+pnpm --filter @vrover/visual-rover-web build:web    # vite build → web-dist/
+pnpm --filter @vrover/visual-rover-web start        # prod: koa serves web-dist/ + API
 ```
 
 Flags: `--host`, `--port`, `--max-steps`, `--platform`, `--scout-host`, `--scout_port` (see `--help`).
@@ -40,7 +40,7 @@ only thing that changes; the observe→think→act loop, SoM, and tools are iden
 | `desktop` | native Rust seam (`DesktopNativeLayerAdapter`) | Real capture/input on a physical desktop; falls back to placeholders in a headless container. |
 
 ```bash
-pnpm rover:web -- --platform mock                       # default
-pnpm rover:web -- --platform remote --scout-port 9000   # drive a Scout server
-pnpm rover:web -- --platform desktop                    # drive the local desktop
+pnpm --filter @vrover/visual-rover-web dev -- --platform mock                       # default
+pnpm --filter @vrover/visual-rover-web dev -- --platform remote --scout-port 9000   # drive a Scout server
+pnpm --filter @vrover/visual-rover-web dev -- --platform desktop                    # drive the local desktop
 ```

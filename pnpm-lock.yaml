@@ -434,6 +434,10 @@ importers:
       '@vrover/scout-protocol':
         specifier: workspace:*
         version: link:../scout-protocol
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
 
   packages/providers:
     dependencies:
@@ -452,6 +456,10 @@ importers:
       '@vrover/scout-protocol':
         specifier: workspace:*
         version: link:../scout-protocol
+    devDependencies:
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
 
   packages/scout-client:
     dependencies:

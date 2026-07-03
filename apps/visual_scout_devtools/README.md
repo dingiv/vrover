@@ -13,13 +13,13 @@ The SPA calls only relative `/api/...` URLs; in dev (`vite`) and preview (`vite 
 
 ```bash
 # 1. start scout with the devtools service on an extra port
-pnpm scout:app -- --devtools-port 7881
+pnpm --filter @vrover/visual-scout start -- --devtools-port 7881
 
 # 2. run the UI (Vite dev server, HMR) — open the printed http://localhost:9090
-pnpm devtools
+pnpm --filter @vrover/visual-scout-devtools dev
 
 # point at a non-default scout devtools port:
-SCOUT_DEVTOOLS_API=http://127.0.0.1:7881 pnpm devtools
+SCOUT_DEVTOOLS_API=http://127.0.0.1:7881 pnpm --filter @vrover/visual-scout-devtools dev
 ```
 
 No API key is needed — the devtools drives scout backends directly.
@@ -28,9 +28,9 @@ No API key is needed — the devtools drives scout backends directly.
 
 | Script | What it does |
 |---|---|
-| `pnpm devtools` | Vite dev server (HMR) on :9090, proxy `/api` → scout devtools. |
-| `pnpm devtools:build` | `vue-tsc --noEmit && vite build` → `dist/` (type-check + production bundle). |
-| `pnpm devtools:preview` | Serve the built `dist/` (`vite preview`), same `/api` proxy. |
+| `pnpm --filter @vrover/visual-scout-devtools dev` | Vite dev server (HMR) on :9090, proxy `/api` → scout devtools. |
+| `pnpm --filter @vrover/visual-scout-devtools build` | `vue-tsc --noEmit && vite build` → `dist/` (type-check + production bundle). |
+| `pnpm --filter @vrover/visual-scout-devtools preview` | Serve the built `dist/` (`vite preview`), same `/api` proxy. |
 
 > This app is **excluded** from the repo's `tsc` typecheck/build graph (it needs DOM lib + bundler
 > resolution). Type-check it with `vue-tsc` and build it with `vite` — both via the scripts above.

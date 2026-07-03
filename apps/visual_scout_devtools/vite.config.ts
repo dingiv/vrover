@@ -8,7 +8,7 @@ import vue from '@vitejs/plugin-vue';
  * therefore calls only relative `/api/...` URLs — single origin, no CORS, and SSE streams
  * cleanly. Point the proxy at a non-default scout with:
  *
- *   SCOUT_DEVTOOLS_API=http://host:port pnpm devtools
+ *   SCOUT_DEVTOOLS_API=http://host:port pnpm --filter @vrover/visual-scout-devtools dev
  */
 const scoutApi = process.env.SCOUT_DEVTOOLS_API ?? 'http://127.0.0.1:7881';
 

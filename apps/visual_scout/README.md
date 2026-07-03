@@ -8,10 +8,10 @@ exposes UI operations over the custom TCP protocol. See [`docs/scout-server.md`]
 ## Run
 
 ```bash
-pnpm scout:app                                  # defaults: multi-screen backend on 127.0.0.1:7878
-pnpm scout:app -- --host 0.0.0.0 --port 9000    # bind publicly on 9000
-pnpm scout:app -- --backend mock                # single-screen mock backend
-pnpm scout:app -- --help                        # usage
+pnpm --filter @vrover/visual-scout start                                  # defaults: multi-screen backend on 127.0.0.1:7878
+pnpm --filter @vrover/visual-scout start -- --host 0.0.0.0 --port 9000    # bind publicly on 9000
+pnpm --filter @vrover/visual-scout start -- --backend mock                # single-screen mock backend
+pnpm --filter @vrover/visual-scout start -- --help                        # usage
 ```
 
 ### Options
@@ -32,8 +32,8 @@ same sessions as the TCP server — render screenshots, drive actions, configure
 web UI:
 
 ```bash
-pnpm scout:app -- --devtools-port 7881
-pnpm devtools                       # serves the UI; see apps/visual_scout_devtools
+pnpm --filter @vrover/visual-scout start -- --devtools-port 7881
+pnpm --filter @vrover/visual-scout-devtools dev   # serves the UI; see apps/visual_scout_devtools
 ```
 
 ### Backends

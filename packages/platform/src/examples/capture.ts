@@ -1,8 +1,8 @@
 /**
  * desktop capture example — create ONE {@link DesktopPlatform} and grab a screenshot.
  *
- *   pnpm desktop:capture [output.png]
- *   pnpm exec tsx packages/platform/src/examples/capture.ts [output.png]
+ *   pnpm --filter @vrover/platform example:capture [output.png]
+ *   pnpm example:capture [output.png]   # from packages/platform/
  *
  * The platform is built from the real native layer ({@link DesktopNativeLayerAdapter} → in-process
  * PipeWire capture via the napi `.node`, with a `capture_one` binary / X11 / placeholder fallback
