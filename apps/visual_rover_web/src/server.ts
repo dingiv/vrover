@@ -100,7 +100,9 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
   // ── wire layers: store → service → routes ───────────────────────────────
   const store = new MemoryTaskStore();
   const service = new AgentService(store, opts.platform);
-  const log = opts.logger.info
+  // Hold the logger itself, not a destructured method — `logger.info` stays bound regardless of
+  // how the Logger is implemented (closures today, but this is robust to a `this`-based rewrite).
+  const logger = opts.logger;
   const routes = createRoutes(service, isDev);
 
   const app = new Koa();
@@ -137,10 +139,10 @@ async function startServer(opts: ServerOptions): Promise<WebHandle> {
     });
   }
 
-  log(`VRover web server listening on http://${opts.host}:${opts.port} (${isDev ? 'dev' : 'prod'})`);
-  log(`  platform: ${opts.platformName}`);
-  if (isDev) log(`  Vite middleware + HMR (root: ${APP_DIR})`);
-  else log(`  serving ${WEB_DIST}`);
+  logger.info(`VRover web server listening on http://${opts.host}:${opts.port} (${isDev ? 'dev' : 'prod'})`);
+  logger.info(`  platform: ${opts.platformName}`);
+  if (isDev) logger.info(`  Vite middleware + HMR (root: ${APP_DIR})`);
+  else logger.info(`  serving ${WEB_DIST}`);
 
   return {
     host: opts.host,

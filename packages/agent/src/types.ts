@@ -48,7 +48,7 @@ export type AgentStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
 // ── streaming events ─────────────────────────────────────────────────────────
 
 /** Events a {@link Task} emits so consumers (e.g. an SSE server) can stream progress. */
-export type TaskEventType = 'step' | 'log' | 'done' | 'error' | 'paused';
+export type TaskEventType = 'step' | 'log' | 'capture' | 'done' | 'error' | 'paused';
 
 /** One streamed event from a {@link Task}. All fields are JSON-serialisable. */
 export interface TaskEvent {
@@ -57,8 +57,22 @@ export interface TaskEvent {
   step?: AgentStep;
   /** Set for `log` events. */
   text?: string;
+  /** Set for `capture` events — the SoM-annotated screenshot grabbed during observe. */
+  capture?: TaskCapture;
   /** Set for terminal events (`done`, `error`, `paused`). */
   result?: TaskResult;
+}
+
+/**
+ * A screenshot captured during a step's observe phase (the SoM-annotated image the model sees).
+ * Emitted as its own `capture` event so a UI can render each grab as soon as it happens, ahead of
+ * the step completing. Transient — not part of the persisted {@link AgentStep}/{@link TaskSnapshot}.
+ */
+export interface TaskCapture {
+  /** 1-based index of the step this capture belongs to. */
+  step: number;
+  /** The annotated PNG as a `data:image/png;base64,…` URL (renders directly in an `<img>`). */
+  dataUrl: string;
 }
 
 /** Subscribes to streaming progress from a {@link Task}. */

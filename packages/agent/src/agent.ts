@@ -224,6 +224,18 @@ class TaskImpl implements Task {
         { type: 'text', text: prompts.render('step', { step, elementTable: formatTable(som.table) }) },
       ],
     });
+    // Stream the SoM-annotated screenshot to listeners (e.g. the web UI's capture gallery) as soon
+    // as it's grabbed — ahead of think/act, so each capture renders live. Built only when someone is
+    // listening: the base64 encode is needless work otherwise (no-listener paths skip it entirely).
+    if (this.listeners.size > 0) {
+      this.emit({
+        type: 'capture',
+        capture: {
+          step,
+          dataUrl: `data:image/png;base64,${som.annotated.png.toString('base64')}`,
+        },
+      });
+    }
     log(
       b.debug
         ? `Step ${step}: ${som.table.length} elements (observe ${(performance.now() - tStep).toFixed(0)}ms)`

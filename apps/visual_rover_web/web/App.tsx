@@ -18,10 +18,16 @@ interface TaskResult {
   error?: string;
 }
 
+interface TaskCapture {
+  step: number;
+  dataUrl: string;
+}
+
 interface TaskEvent {
-  type: 'step' | 'log' | 'done' | 'error' | 'paused';
+  type: 'step' | 'log' | 'capture' | 'done' | 'error' | 'paused';
   step?: AgentStep;
   text?: string;
+  capture?: TaskCapture;
   result?: TaskResult;
 }
 
@@ -48,6 +54,7 @@ export function App() {
   const [status, setStatus] = useState('');
   const [statusCls, setStatusCls] = useState('');
   const [streamSteps, setStreamSteps] = useState<AgentStep[]>([]);
+  const [captures, setCaptures] = useState<TaskCapture[]>([]);
   const [log, setLog] = useState<string[]>([]);
   const [result, setResult] = useState<TaskResult | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
@@ -80,6 +87,7 @@ export function App() {
 
     setRunning(true);
     setStreamSteps([]);
+    setCaptures([]);
     setLog([]);
     setResult(null);
     setErrorMsg('');
@@ -140,6 +148,12 @@ export function App() {
     switch (ev.type) {
       case 'log':
         if (ev.text) setLog((prev) => [...prev, ev.text!]);
+        break;
+      case 'capture':
+        if (ev.capture) {
+          setCaptures((prev) => [...prev, ev.capture!]);
+          setStatusLine(`captured step ${ev.capture!.step}…`);
+        }
         break;
       case 'step':
         if (ev.step) {
@@ -227,6 +241,20 @@ export function App() {
               {formatStep(s)}
             </pre>
           ))}
+        </section>
+      )}
+
+      {captures.length > 0 && (
+        <section>
+          <h2>Captures ({captures.length})</h2>
+          <div className="captures">
+            {captures.map((c) => (
+              <figure key={c.step} className="capture">
+                <img src={c.dataUrl} alt={`screenshot step ${c.step}`} loading="lazy" />
+                <figcaption>step {c.step}</figcaption>
+              </figure>
+            ))}
+          </div>
         </section>
       )}
 

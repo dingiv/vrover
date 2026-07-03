@@ -16,6 +16,7 @@ export type {
   AgentStatus,
   MemoryManager,
   Task,
+  TaskCapture,
   TaskEvent,
   TaskEventType,
   TaskListener,

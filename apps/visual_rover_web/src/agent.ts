@@ -1,5 +1,5 @@
 import { runAgent, createAgent, RemotePlatform } from '@vrover/agent';
-import type { Task, TaskResult } from '@vrover/agent';
+import type { Agent, TaskResult } from '@vrover/agent';
 import { complete as completeAnthropic } from '@vrover/llm';
 import type { CompleteFn } from '@vrover/llm';
 import { createProviderFromEnv } from '@vrover/providers';
@@ -73,7 +73,7 @@ export interface RunAgentTaskOutcome {
 export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentTaskOutcome> {
   const log: string[] = [];
   const platform = opts.platform ?? new MockPlatform();
-  const { complete, ...agentCfg } = resolveConfig(opts);
+  const { complete, ...agentCfg } = resolveConfig({ complete: opts.complete });
 
   const result = await runAgent({
     platform,
@@ -94,13 +94,17 @@ export async function runAgentTask(opts: RunAgentTaskOptions): Promise<RunAgentT
 }
 
 /**
- * Create a streaming {@link Task} wired to a mock platform + the configured LLM.
- * The caller subscribes via `task.on(listener)`, then calls `task.run()` — events fire
- * as each step completes. Ideal for SSE endpoints.
+ * Build the shared {@link Agent} the web service drives every task from. Resolves config + provider
+ * **once** and returns a single Agent — the documented factory-for-tasks shape (`agent.createTask`)
+ * — so the service's `execute`/`stream` create independent tasks without re-reading config or
+ * re-wiring the loop per call. One Agent, many tasks.
+ *
+ * **Lazy by design:** provider construction (e.g. `createGlm`) throws without an API key, so the
+ * service must NOT build this at boot — it creates the Agent on first task, keeping the server
+ * key-free until a real run.
  */
-export function createStreamingTask(opts: RunAgentTaskOptions): Task {
-  const platform = opts.platform ?? new MockPlatform();
-  const { complete, ...agentCfg } = resolveConfig(opts);
+export function createWebAgent(platform: Platform): Agent {
+  const { complete, ...agentCfg } = resolveConfig({});
   return createAgent({
     platform,
     complete,
@@ -109,15 +113,15 @@ export function createStreamingTask(opts: RunAgentTaskOptions): Task {
     captureTimeoutMs: agentCfg.captureTimeoutMs,
     debug: agentCfg.debug,
     maxSteps: agentCfg.maxSteps,
-  }).createTask(opts.task);
+    log: (line: string) => webLogger.debug(line), // tee the brain's progress trace into the server logger
+  });
 }
 
 /**
- * Resolve the LLM exit point + agent config from `vrover.conf` **once per task**.
- * The caller-supplied `complete` wins over config; `maxSteps` is the per-task override
- * (optional — `runAgent` already defaults from config).
+ * Resolve the LLM exit point + agent config from `vrover.conf`. The caller-supplied `complete`
+ * wins over config (the test seam); omit it to use the configured provider.
  */
-function resolveConfig(opts: RunAgentTaskOptions): {
+function resolveConfig(opts: { complete?: CompleteFn }): {
   complete: CompleteFn;
   contextWindow: number;
   keepScreenshots: number;

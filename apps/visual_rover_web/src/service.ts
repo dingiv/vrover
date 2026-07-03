@@ -5,24 +5,22 @@
  * persistence to a {@link TaskStore}, and exposes one-shot (`execute`) and streaming
  * (`stream`) entry points. Routes calls this — it has zero HTTP knowledge.
  */
-import type { TaskEvent, TaskResult } from '@vrover/agent';
+import type { Agent, TaskEvent } from '@vrover/agent';
 import { MockPlatform } from '@vrover/platform';
 import type { Platform } from '@vrover/platform';
-import { runAgentTask, createStreamingTask } from './agent.js';
+import { createWebAgent } from './agent.js';
 import { MemoryTaskStore, newTaskRecord } from './store.js';
 import type { TaskRecord, TaskStore } from './store.js';
-import { createLogger, Logger } from '@vrover/logger';
+import { createLogger, type Logger } from '@vrover/logger';
 
 
 export type { TaskRecord, TaskStore } from './store.js';
 
 export class AgentService {
+  logger: Logger;
 
-
-  // TODO: AgentService 需要持有 Agent 对象实例
-  // private agent : Agent
-
-  logger: Logger
+  /** The shared brain every task is created from. Built lazily on first task — see {@link agent}. */
+  private _agent?: Agent;
 
   /**
    * @param store  persistence layer
@@ -34,6 +32,15 @@ export class AgentService {
     private readonly platform: Platform = new MockPlatform(),
   ) {
     this.logger = createLogger('web/service');
+  }
+
+  /**
+   * The shared {@link Agent} — one brain driving many independent {@link Task}s (the documented
+   * factory-for-tasks shape). **Lazy:** provider construction may throw without an API key, so the
+   * Agent is created on first task, never at server boot (the rover app stays key-free to start).
+   */
+  private get agent(): Agent {
+    return (this._agent ??= createWebAgent(this.platform));
   }
 
   /** Convenience: new service with an in-memory store + the default mock platform. */
@@ -49,30 +56,7 @@ export class AgentService {
    * The caller blocks until the agent finishes (suitable for simple HTTP POST).
    */
   async execute(goal: string, maxSteps?: number): Promise<TaskRecord> {
-    const rec = newTaskRecord(goal);
-    await this.store.save(rec);
-
-    let result: TaskResult;
-    let log: string[];
-
-    try {
-      const out = await runAgentTask({ task: goal, maxSteps, platform: this.platform });
-      result = out.result;
-      log = out.log;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error('task failed', { goal, error: msg });
-      result = { status: 'error', error: msg, steps: [] };
-      log = [`Error: ${msg}`];
-    }
-
-    rec.status = result.status;
-    rec.steps = result.steps;
-    rec.log = log;
-    rec.result = result;
-    rec.updatedAt = Date.now();
-    await this.store.save(rec);
-    return rec;
+    return this.runTask(goal, maxSteps, undefined);
   }
 
   // ── streaming ─────────────────────────────────────────────────────────────
@@ -87,26 +71,46 @@ export class AgentService {
     maxSteps: number | undefined,
     sink: (ev: TaskEvent) => void,
   ): Promise<TaskRecord> {
+    return this.runTask(goal, maxSteps, sink);
+  }
+
+  // ── shared task runner ────────────────────────────────────────────────────
+
+  /**
+   * Drive one task from the shared {@link Agent}. Every event is forwarded to `sink` (when given)
+   * — that is how results reach the frontend (e.g. an SSE writer) — and applied to the record for
+   * incremental persistence. The listener is always released in `finally`, so neither the record
+   * nor the sink closure outlives the task.
+   */
+  private async runTask(
+    goal: string,
+    maxSteps: number | undefined,
+    sink: ((ev: TaskEvent) => void) | undefined,
+  ): Promise<TaskRecord> {
     const rec = newTaskRecord(goal);
     await this.store.save(rec);
-    const task = createStreamingTask({ task: goal, platform: this.platform });
 
-    task.on((ev: TaskEvent) => {
-      sink(ev);
-      this.applyEvent(rec, ev);   // TODO: 调用这个，然后还要把执行结果返回给前端
-    });   // FIXME: 谁来调用 task.off 方法？
+    const task = this.agent.createTask(goal);
+    const onEvent = (ev: TaskEvent): void => {
+      sink?.(ev);
+      this.applyEvent(rec, ev);
+    };
+    task.on(onEvent);
 
     try {
-      await task.run({ maxSteps });
+      rec.result = await task.run({ maxSteps });
     } catch (err) {
+      // An observe/act throw escapes run() before any terminal event fires — synthesize one so the
+      // sink (frontend) and the record both see the failure. (LLM errors are handled inside run()
+      // and arrive here as a normal 'error' event, not a throw.)
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error('streaming task failed', { goal, error: msg });
-      const errorEvent: TaskEvent = {
+      this.logger.error('task failed', { goal, error: msg });
+      onEvent({
         type: 'error',
         result: { status: 'error', error: msg, steps: [...task.steps] },
-      };
-      sink(errorEvent);
-      this.applyEvent(rec, errorEvent);   // TODO: 调用这个，然后还要把执行结果返回给前端
+      });
+    } finally {
+      task.off(onEvent);
     }
 
     rec.status = rec.result?.status ?? 'error';
@@ -130,6 +134,9 @@ export class AgentService {
 
   private applyEvent(rec: TaskRecord, ev: TaskEvent): void {
     switch (ev.type) {
+      case 'capture':
+        // Captures are transient UI-only events (live screenshots); not part of the record.
+        return;
       case 'log':
         if (ev.text) rec.log.push(ev.text);
         break;
