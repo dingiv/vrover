@@ -4,8 +4,7 @@
  * management registry, and `RemotePlatform` — the brain-side adapter that drives a remote Scout
  * server through the standalone `@vrover/scout-client` SDK.
  */
-export { runAgent } from './loop.js';
-export { createAgent, getAgentLogger } from './agent.js';
+export { runAgent, createAgent, getAgentLogger } from './core.js';
 export { FileMemoryManager } from './memory.js';
 export { pruneForModel, turnBoundaries } from './context.js';
 export type { PruneOptions } from './context.js';

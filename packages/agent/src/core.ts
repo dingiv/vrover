@@ -1,3 +1,9 @@
+/**
+ * core.ts — the VRover brain. The stateful {@link Agent}/{@link Task} (one brain driving many
+ * independent observe→think→act conversations) plus the thin one-shot {@link runAgent} wrapper.
+ * A step is implemented once, here, composing the injected Platform / CompleteFn / dispatcher /
+ * parser / tools / prompts.
+ */
 import { randomUUID } from 'node:crypto';
 import type { CompleteFn, LLMResponse, Message, ToolDef } from '@vrover/llm';
 import type { NativeParser } from '@vrover/native';
@@ -11,6 +17,7 @@ import { createLogger, type Logger } from '@vrover/logger';
 import type {
   Agent,
   AgentDeps,
+  AgentOptions,
   AgentStatus,
   AgentStep,
   DispatchFn,
@@ -81,6 +88,19 @@ export function createAgent(deps: AgentDeps): Agent {
     memory: deps.memory,
   };
   return new AgentImpl(brain);
+}
+
+/**
+ * The observe → think → act loop, run to completion. A thin wrapper over the stateful {@link Agent}
+ * — `createAgent(opts).run(task)` — so a step is implemented once (in this module's {@link AgentImpl}
+ * / {@link TaskImpl}, which compose the injected Platform / CompleteFn / dispatcher / parser / tools
+ * / prompts).
+ *
+ * Runs until the model calls `done`, until `maxSteps`, or until an LLM error. For step-by-step
+ * control (single-step, pause, rewind via `goto`), use `createAgent()` directly.
+ */
+export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
+  return createAgent(opts).run(opts.task, { maxSteps: opts.maxSteps });
 }
 
 /** A wired-up brain: factory + holder of the shared collaborators/config/memory. No per-task state. */

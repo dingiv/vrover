@@ -41,7 +41,7 @@
 2. **tarko 没有 `goto` / 历史分支能力**（Lane 5 已穷举确认）。`agent-snapshot` 是**为测试服务的录制/回放**（每个快照 = 一个独立测试用例，不能从某历史点 fork 新对话）。所以 VRover 在做的 `Agent.goto`（回到历史 chat 点分支重跑）是**净新设计**——tarko 只提供「录制 / 恢复 / 校验」的**底座**可借鉴，分支逻辑得自研。详见 [05](./05-server-snapshot-context.md)。
 
 3. **VRover 已有、无需重复的**（避免无谓待办）：
-   - observe→think→act 循环（`packages/agent/src/loop.ts#runAgent`）
+   - observe→think→act 循环（`packages/agent/src/core.ts#runAgent`）
    - Set-of-Mark 标注（`@vrover/som`）
    - function-calling / tool_use 块（`@vrover/llm` + `@vrover/tools`）
    - Platform 接口 + Mock/Desktop/Remote 三实现（`@vrover/platform`）

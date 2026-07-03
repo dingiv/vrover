@@ -1,6 +1,6 @@
 # 02 · Agent 循环 / 回合制 / goto / pause / 流式
 
-> 映射 VRover：`@vrover/agent` 的 `runAgent()`（`packages/agent/src/loop.ts`）+ **正在做的 `Agent` 接口**（`types.ts` 里的 sketch：`exec`/`goto`/`pause` + `loop.ts:230` 的 `handleResponseChunk`）+ `packages/agent/src/context.ts`（`pruneForModel` 滑动窗口）。
+> 映射 VRover：`@vrover/agent` 的 `runAgent()`（`packages/agent/src/core.ts`）+ **正在做的 `Agent` 接口**（`types.ts` 里的 sketch：`exec`/`goto`/`pause` + `core.ts` 的 `TaskImpl`）+ `packages/agent/src/context.ts`（`pruneForModel` 滑动窗口）。
 >
 > 对照对象：`multimodal/gui-agent/agent-sdk`（`GUIAgent` 类）+ `multimodal/tarko/agent`（`@tarko/agent` 通用 agent 框架：`AgentRunner`/`LoopExecutor`/`AgentEventStream`/`MessageHistory`/`ExecutionController`）+ `apps/ui-tars`（桌面端 `runAgent` 服务）。
 
