@@ -117,6 +117,7 @@ export interface MemoryManager {
  *                observe turn (annotated screenshot + element table). Optional `message` steers it.
  *   goto(step)   destructive rewind to the end of step N (1-based; 0 = just the goal), then continue.
  *   pause()      cooperatively stop a running loop at the next step boundary.
+ *   step()       single-step continue: in single-step mode, advance the loop by exactly one iteration.
  *   save()       persist this task via the agent's {@link MemoryManager} (if any).
  */
 export interface Task {
@@ -129,11 +130,15 @@ export interface Task {
   readonly steps: readonly AgentStep[];
   /** Set once status reaches 'done' / 'error' / 'paused'. */
   readonly result?: TaskResult;
+  /** True when the agent was created with single-step debug mode. */
+  readonly singleStep: boolean;
 
   run(opts?: { maxSteps?: number }): Promise<TaskResult>;
   exec(opts?: { message?: string }): Promise<AgentStep | null>;
   goto(step: number): void;
   pause(): void;
+  /** Single-step continue: advance a single-stepping loop by one iteration (symmetric to `pause()`). */
+  step(): void;
   save(): Promise<void>;
 
   /** Subscribe to streaming progress events (step / log / done / error / paused). */
@@ -178,6 +183,13 @@ export interface AgentDeps {
   captureTimeoutMs?: number;
   /** Enable verbose per-step logging — timing, tool calls, element counts (default: false). */
   debug?: boolean;
+  /**
+   * Single-step debug mode (default: false): `run()` does one observe→think→act iteration, then
+   * blocks until `task.step()` (the "continue" command) advances to the next. Context (history /
+   * steps) persists between steps. Requires the `createAgent` + `task.run()` + `task.step()` API;
+   * the one-shot `runAgent` rejects it.
+   */
+  singleStep?: boolean;
   /** Default max steps for tasks created by this agent (default: 15). */
   maxSteps?: number;
   /** Optional persistence for task save/load. Defaults to none. */

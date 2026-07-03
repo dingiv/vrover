@@ -59,6 +59,7 @@ interface Brain {
   readonly keepScreenshots: number;
   readonly captureTimeoutMs: number;
   readonly debug: boolean;
+  readonly singleStep: boolean;
   readonly maxStepsDefault: number;
   readonly memory: MemoryManager | undefined;
 }
@@ -84,6 +85,7 @@ export function createAgent(deps: AgentDeps): Agent {
     keepScreenshots: deps.keepScreenshots ?? 2,
     captureTimeoutMs: deps.captureTimeoutMs ?? 30000,
     debug: deps.debug ?? false,
+    singleStep: deps.singleStep ?? false,
     maxStepsDefault: deps.maxSteps ?? 15,
     memory: deps.memory,
   };
@@ -100,6 +102,12 @@ export function createAgent(deps: AgentDeps): Agent {
  * control (single-step, pause, rewind via `goto`), use `createAgent()` directly.
  */
 export async function runAgent(opts: AgentOptions): Promise<TaskResult> {
+  if (opts.singleStep) {
+    throw new Error(
+      'singleStep mode requires the createAgent + task.run() + task.step() API; runAgent is one-shot ' +
+        'and has no step() handle (it would deadlock).',
+    );
+  }
   return createAgent(opts).run(opts.task, { maxSteps: opts.maxSteps });
 }
 
@@ -146,6 +154,9 @@ class TaskImpl implements Task {
   private pauseRequested = false;
   private stepCounter = 0;
   private readonly listeners = new Set<TaskListener>();
+  /** Single-step gate: `step()` resolves the pending between-iteration wait (or latches if early). */
+  private stepResolve: (() => void) | null = null;
+  private stepLatched = false;
 
   constructor(brain: Brain, goal: string, id: string) {
     this.brain = brain;
@@ -185,6 +196,9 @@ class TaskImpl implements Task {
   get result(): TaskResult | undefined {
     return this._result;
   }
+  get singleStep(): boolean {
+    return this.brain.singleStep;
+  }
 
   // ── auto-pilot ────────────────────────────────────────────────────────────
   async run(opts?: { maxSteps?: number }): Promise<TaskResult> {
@@ -194,9 +208,21 @@ class TaskImpl implements Task {
     const maxSteps = opts?.maxSteps ?? this.brain.maxStepsDefault;
     this._status = 'running';
     this.pauseRequested = false;
+    this.stepLatched = false; // reset any leftover single-step latch (e.g. resume after a pause)
 
     while (this._status === 'running' && !this.pauseRequested && this.stepCounter < maxSteps) {
       await this.exec();
+      // Single-step debug: after one iteration, block until `step()` (the continue command) —
+      // unless the task just reached a terminal state or was paused.
+      if (
+        this.brain.singleStep &&
+        this._status === 'running' &&
+        !this.pauseRequested &&
+        this.stepCounter < maxSteps
+      ) {
+        this.emit({ type: 'log', text: `Single-step: step ${this.stepCounter} done — call step() to continue.` });
+        await this.awaitStepContinue();
+      }
     }
 
     // exec() sets _result/_status on done|error. Handle the two loop-exit reasons here:
@@ -337,6 +363,42 @@ class TaskImpl implements Task {
   // ── interrupt ──────────────────────────────────────────────────────────────
   pause(): void {
     this.pauseRequested = true;
+    this.releaseStepGate(); // unblock a pending single-step wait so the loop sees pauseRequested
+  }
+
+  /**
+   * Single-step continue: release the between-iteration wait so the loop advances exactly one
+   * iteration. Race-safe — if called before the wait is set up (e.g. mid-iteration), it latches and
+   * the next wait returns immediately; redundant calls coalesce into one pending advance.
+   */
+  step(): void {
+    if (this.stepResolve) {
+      const r = this.stepResolve;
+      this.stepResolve = null;
+      r();
+    } else {
+      this.stepLatched = true;
+    }
+  }
+
+  /** Wake a pending single-step wait (used by `pause()` so a waiting loop can exit). */
+  private releaseStepGate(): void {
+    if (this.stepResolve) {
+      const r = this.stepResolve;
+      this.stepResolve = null;
+      r();
+    }
+  }
+
+  /** In single-step mode, block after each iteration until `step()` (or `pause()`/terminal). */
+  private async awaitStepContinue(): Promise<void> {
+    if (this.stepLatched) {
+      this.stepLatched = false;
+      return;
+    }
+    await new Promise<void>((resolve) => {
+      this.stepResolve = resolve;
+    });
   }
 
   // ── persist ────────────────────────────────────────────────────────────────

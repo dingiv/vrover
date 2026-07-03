@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createAgent } from '@vrover/agent';
-import type { Task } from '@vrover/agent';
+import { createAgent, runAgent } from '@vrover/agent';
+import type { Task, TaskEvent } from '@vrover/agent';
 import { MockPlatform } from '@vrover/platform';
 import type { CompleteFn, Message } from '@vrover/llm';
 
@@ -22,6 +22,19 @@ function scriptedComplete(
       stopReason: 'tool_use',
     };
   };
+}
+
+/** Resolve on the next `'step'` event whose `step.index === n`; auto-unsubscribes. */
+function waitForStep(task: Task, n: number): Promise<void> {
+  return new Promise((resolve) => {
+    const l = (ev: TaskEvent): void => {
+      if (ev.type === 'step' && ev.step?.index === n) {
+        task.off(l);
+        resolve();
+      }
+    };
+    task.on(l);
+  });
 }
 
 describe('Agent / Task', () => {
@@ -167,5 +180,78 @@ describe('Agent / Task', () => {
     expect(result.error).toBe('boom');
     expect(task.status).toBe('error');
     expect(await task.exec()).toBeNull();
+  });
+});
+
+describe('single-step mode', () => {
+  it('one iteration per step(); context persists; runs to done', async () => {
+    const agent = createAgent({
+      platform: new MockPlatform(),
+      complete: scriptedComplete([
+        { name: 'click', input: { mark: 1 } },
+        { name: 'type', input: { mark: 1, text: 'hi' } },
+        { name: 'done', input: { summary: 'finished' } },
+      ]),
+      singleStep: true,
+      maxSteps: 10,
+    });
+    const task = agent.createTask('do it');
+    expect(task.singleStep).toBe(true);
+
+    // run() starts iteration 1 immediately, then blocks at the step gate.
+    const runPromise = task.run();
+    await waitForStep(task, 1);
+    expect(task.steps).toHaveLength(1);
+    expect(task.status).toBe('running');
+    const historyAfter1 = task.history.length;
+
+    // continue → iteration 2 (context grew — history persisted across the gate).
+    const step2 = waitForStep(task, 2);
+    task.step();
+    await step2;
+    expect(task.steps).toHaveLength(2);
+    expect(task.status).toBe('running');
+    expect(task.history.length).toBeGreaterThan(historyAfter1);
+
+    // continue → iteration 3 = done → run() resolves.
+    task.step();
+    const result = await runPromise;
+    expect(result.status).toBe('success');
+    expect(result.summary).toBe('finished');
+    expect(task.status).toBe('done');
+    expect(task.steps).toHaveLength(3);
+  });
+
+  it('pause() aborts a waiting single-step task as paused', async () => {
+    const agent = createAgent({
+      platform: new MockPlatform(),
+      complete: scriptedComplete([
+        { name: 'click', input: { mark: 1 } },
+        { name: 'click', input: { mark: 1 } },
+        { name: 'done', input: { summary: 'ok' } },
+      ]),
+      singleStep: true,
+    });
+    const task = agent.createTask('do it');
+
+    const runPromise = task.run();
+    await waitForStep(task, 1); // iteration 1 done, now gated (waiting for step())
+    task.pause(); // abort the wait
+    const result = await runPromise;
+
+    expect(result.status).toBe('paused');
+    expect(task.status).toBe('paused');
+    expect(task.steps).toHaveLength(1);
+  });
+
+  it('runAgent rejects singleStep (one-shot, no step() handle)', async () => {
+    await expect(
+      runAgent({
+        platform: new MockPlatform(),
+        complete: scriptedComplete([]),
+        task: 'x',
+        singleStep: true,
+      }),
+    ).rejects.toThrow(/singleStep/);
   });
 });
