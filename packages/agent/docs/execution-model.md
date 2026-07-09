@@ -331,7 +331,7 @@ round n+1 leader.tick: complete() 在含上述 tool_result 的 history 上续跑
 - **leader 视觉路径（已定）**：leader 永不自己 capture（`Observes` 只归 GUIAgent）。视觉需求由 **leader 实现**决定——`GUILeaderAgent` 多模态、消费 GUIAgent 经 `deliver_task` 回传的截图来规划；`CodeLeaderAgent` 无视觉。即「纯靠 worker 回传」，且是否需要视觉是 per-leader-impl 的。design.md §3 场景二「leader 带截图」需改写为「leader 经 worker 结果获图」。
 - **visual_scout 双重身份（design.md §10）已消解**（备忘）：它就是一个 desktop 工具（资源），Platform 是其内部资源——不再是「资源 vs Platform 来源」的分界问题。
 - **round 内并发 vs 串行**：§0/§4 取「worker 可并发各一格」（对齐 design.md §7 的真并发诉求）。若要强确定论，可退化为严格轮转（一 round 一 tick）。待定。
-- **资源门控时机**：调度期（team loop 见 desktop 空闲才 tick 该 GUI Task）vs tick 内（worker 在 `act` 里 `acquire`，失败则本轮跳过）。前者耦合调度器与资源需求，后者更自治。待定。
+- **资源门控时机（已定）**：取**调度期门控**——team loop 在 tick 前为 worker Task `acquireRequired` 其 `profile.requires` 里的独占资源；被占则本轮跳过该 Task。lease **跨整个 Task 持有**（首 tick 获取、续 tick 复用、终态 `releaseTerminated` 释放），避免中途被别的 worker 抢占导致 GUI 状态交错。实现见 `src/resources.ts` + `team.ts` 的 `acquireRequired`。
 - **`DeliverTaskInput.to` 的路由**：`agentId` 直指 vs 能力标签（`specialty`）让 team 解析。后者更接近「按能力路由」，但解析规则待定。
-- **一个 leader Task 同时多个待决 DeliverTask**：本文假设一格至多一个（挂起即停）。若要支持 fan-out（一次派多个 worker、全部回来再续跑），需 `suspendedOn` 升级为集合 + 「全部/任一」汇合策略——接近 Plan-DAG，留待 §design.md §10 的 `Plan` 结构讨论。
+- **一个 leader Task 同时多个待决 DeliverTask（已实现）**：`suspendedOn` 已是集合；leader 一个 tick 可 fan-out N 个 `deliver_task`，挂起等**全部**完成（wait-for-all）再续跑——每个子任务结果各作为一个 `tool_result` 喂回。「任一完成即续跑」（wait-for-any）目前未做，留待需要时再加。
 - **GUI worker 的 `AgentStep`（含 elements 计数）与 leader 的 step 形状不同**：leader 的 step 记录（无 elements、记的是「派了哪些子任务」）需单独定义，留 types 细化。

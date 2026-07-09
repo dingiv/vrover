@@ -30,6 +30,11 @@ export const DEFAULTS: VroverConfig = {
       apiKey: '',
       model: '',
     },
+    deepseek: {
+      apiKey: '',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-v4-pro',
+    },
   },
   scout: {
     host: '127.0.0.1',

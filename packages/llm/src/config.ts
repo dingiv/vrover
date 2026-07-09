@@ -15,6 +15,12 @@ export interface Config {
   /** Where the Visual Scout server listens (brain/client side reads this). */
   scoutHost: string;
   scoutPort: number;
+  /** DeepSeek (Anthropic-compatible endpoint). */
+  deepseek: {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+  };
 }
 
 let cached: Config | undefined;
@@ -31,6 +37,11 @@ export function loadConfig(): Config {
     maxSteps: cfg.agent.maxSteps,
     scoutHost: cfg.scout.host,
     scoutPort: cfg.scout.port,
+    deepseek: {
+      apiKey: cfg.llm.deepseek.apiKey,
+      baseUrl: cfg.llm.deepseek.baseUrl,
+      model: cfg.llm.deepseek.model,
+    },
   };
   return cached;
 }

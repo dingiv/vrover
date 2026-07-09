@@ -12,7 +12,8 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "example": "tsx examples/read-source.ts"
   },
   "dependencies": {
     "@vrover/config": "workspace:*",

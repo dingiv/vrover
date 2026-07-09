@@ -5,12 +5,14 @@
  * parser / tools / prompts.
  */
 import { randomUUID } from 'node:crypto';
-import type { CompleteFn, LLMResponse, Message, ToolDef } from '@vrover/llm';
+import type { LLMResponse, Message, ToolDef } from '@vrover/llm';
 import type { NativeParser } from '@vrover/native';
 import type { Platform } from '@vrover/platform';
 import { formatTable } from '@vrover/som';
 import { TOOL_DEFS, dispatch as defaultDispatch } from '@vrover/tools';
 import { pruneForModel, turnBoundaries } from './context.js';
+import { createChatModel } from './model.js';
+import type { ChatModel } from './model.js';
 import { prompts } from './prompts/index.js';
 import { act, errMsg, observe } from './step.js';
 import { createLogger, type Logger } from '@vrover/logger';
@@ -27,6 +29,7 @@ import type {
   TaskListener,
   TaskResult,
   TaskSnapshot,
+  TaskSuspendState,
 } from './types.js';
 
 // The brain's logger is created lazily on first use and cached for the process — the same
@@ -49,7 +52,7 @@ export function getAgentLogger(): Logger {
  */
 interface Brain {
   readonly platform: Platform;
-  readonly complete: CompleteFn;
+  readonly model: ChatModel;
   readonly runTool: DispatchFn;
   readonly nativeParser: NativeParser | undefined;
   readonly tools: ToolDef[];
@@ -75,7 +78,7 @@ export function createAgent(deps: AgentDeps): Agent {
 
   const brain: Brain = {
     platform: deps.platform,
-    complete: deps.complete,
+    model: resolveModel(deps),
     runTool: deps.dispatch ?? defaultDispatch,
     nativeParser: deps.nativeParser,
     tools: deps.tools ?? TOOL_DEFS,
@@ -93,6 +96,16 @@ export function createAgent(deps: AgentDeps): Agent {
     memory: deps.memory,
   };
   return new AgentImpl(brain);
+}
+
+/**
+ * Resolve the agent's primary chat model: an explicit `model` wins; otherwise a legacy `complete` is
+ * wrapped into a `ChatModel` (§8 step-3 migration). At least one must be supplied.
+ */
+function resolveModel(deps: AgentDeps): ChatModel {
+  if (deps.model) return deps.model;
+  if (deps.complete) return createChatModel({ id: 'agent', complete: deps.complete });
+  throw new Error('AgentDeps requires either `model` or `complete`');
 }
 
 /**
@@ -124,9 +137,9 @@ class AgentImpl implements Agent {
     return this.brain.memory;
   }
 
-  createTask(goal: string, opts?: { id?: string }): Task {
+  createTask(goal: string, opts?: { id?: string; ownerId?: string }): Task {
     const id = opts?.id ?? randomUUID();
-    return new TaskImpl(this.brain, goal, id);
+    return new TaskImpl(this.brain, goal, id, opts?.ownerId ?? '');
   }
 
   async loadTask(id: string): Promise<Task | null> {
@@ -156,6 +169,8 @@ class TaskImpl implements Task {
   private _steps: AgentStep[] = [];
   private _status: AgentStatus = 'idle';
   private _result: TaskResult | undefined;
+  private _ownerId = '';
+  private _suspendedOn: TaskSuspendState[] = [];
   private pauseRequested = false;
   private stepCounter = 0;
   private readonly listeners = new Set<TaskListener>();
@@ -163,16 +178,17 @@ class TaskImpl implements Task {
   private stepResolve: (() => void) | null = null;
   private stepLatched = false;
 
-  constructor(brain: Brain, goal: string, id: string) {
+  constructor(brain: Brain, goal: string, id: string, ownerId = '') {
     this.brain = brain;
     this._goal = goal;
     this._id = id;
+    this._ownerId = ownerId;
     this._history = [{ role: 'user', content: [{ type: 'text', text: goal }] }];
   }
 
   /** Restore a task from a persisted snapshot (turn boundaries re-derive from history on demand). */
   static fromSnapshot(brain: Brain, snap: TaskSnapshot): TaskImpl {
-    const t = new TaskImpl(brain, snap.goal, snap.id);
+    const t = new TaskImpl(brain, snap.goal, snap.id, snap.ownerId ?? '');
     t._history = snap.history;
     t._steps = snap.steps;
     t._status = snap.status === 'running' ? 'idle' : snap.status; // a restored task is never mid-loop
@@ -203,6 +219,31 @@ class TaskImpl implements Task {
   }
   get singleStep(): boolean {
     return this.brain.singleStep;
+  }
+  get ownerId(): string {
+    return this._ownerId;
+  }
+  get suspendedOn(): readonly TaskSuspendState[] {
+    return this._suspendedOn;
+  }
+  get runnable(): boolean {
+    return (
+      (this._status === 'idle' || this._status === 'running') && this._suspendedOn.length === 0
+    );
+  }
+
+  // ── external-driver seam (team loop); inert for the standalone GUI loop ─────────────
+  append(message: Message): void {
+    this._history.push(message);
+  }
+  markStatus(status: AgentStatus): void {
+    this._status = status;
+  }
+  setResult(result: TaskResult): void {
+    this._result = result;
+  }
+  setSuspend(states: readonly TaskSuspendState[]): void {
+    this._suspendedOn = [...states];
   }
 
   // ── auto-pilot ────────────────────────────────────────────────────────────
@@ -296,7 +337,7 @@ class TaskImpl implements Task {
     // ── think ───────────────────────────────────────────────────────────────
     let resp: LLMResponse;
     try {
-      resp = await b.complete({
+      resp = await b.model.complete({
         system: b.system,
         messages: pruneForModel(this._history, {
           contextWindow: b.contextWindow,
@@ -418,6 +459,7 @@ class TaskImpl implements Task {
       steps: this._steps,
       status: this._status,
       result: this._result,
+      ownerId: this._ownerId,
     });
   }
 

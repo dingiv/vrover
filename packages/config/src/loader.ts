@@ -80,6 +80,10 @@ const ENV_MAP: [string[], string][] = [
   [['llm', 'custom', 'baseUrl'], 'LLM_BASE_URL'],
   [['llm', 'custom', 'apiKey'], 'LLM_API_KEY'],
   [['llm', 'custom', 'model'], 'LLM_MODEL'],
+  // llm.deepseek
+  [['llm', 'deepseek', 'apiKey'], 'DEEPSEEK_API_KEY'],
+  [['llm', 'deepseek', 'baseUrl'], 'DEEPSEEK_BASE_URL'],
+  [['llm', 'deepseek', 'model'], 'DEEPSEEK_MODEL'],
   // provider selection
   [['llm', 'provider'], 'LLM_PROVIDER'],
   // scout

@@ -1,6 +1,8 @@
 # Agent 模块设计：单脑 → 多脑（思路）
 
-> 状态：**构想 / 方向性设计**。已落地部分以代码为准（类型见 `src/types.ts`，实现见 `src/core.ts`）；本文标 🔼/🆕 的是**提议**，尚未实现。总览见 [index.md](./index.md)。
+> 状态：**构想 / 方向性设计**。已落地部分以代码为准（类型见 `src/types.ts`，实现见 `src/core.ts`）；本文标 🔼/🆕 的是**提议**，尚未实现，标 ✅ 的为**已实现**。总览见 [index.md](./index.md)。
+>
+> **执行层已落地（✅）**：team loop / `tick` / 写锁 / `DeliverTask`（含 fan-out）/ resource+lease 已实现于 `src/team.ts` + `src/resources.ts`（外加 `types.ts`/`core.ts` 的增量接缝）。运行机制与类型草案见 [`execution-model.md`](./execution-model.md)——本文 §5.1/§5.3/§5.4/§5.5/§5.6/§3 已据此回改；凡涉及「team loop 怎么跑」的细节以 execution-model.md 为准。
 >
 > 本文回答：**为什么多脑**、**目标模型长什么样**、**怎么从现状演化**，并用两个具体场景（DeepSeek 写文章 / GLM + GUI-TARS 操作 GUI）验证设计。
 >
@@ -61,18 +63,18 @@ Model 池: { glm:  createChatModel({ id:'glm-4.6v', modalities:['text','image'] 
 Team     = createAgentTeam({ leader(glm), workers:[operator(tars)], resources:[scout], ... })
 
 用户 Task("登录某网站并导出账单")
- └ leader.run(task)
-     leader 组合 glm.complete(带截图) → plan
-       → Plan{ steps:[ "点登录按钮","输用户名", ... ] }              // 高层 GUI 步骤
- └ Team 分派每步给 operator；operator 先 acquire('visual_scout') 拿到 Platform
- └ operator.run(step)
-     operator 组合 Observes + Grounds + Acts（Platform 来自 lease）：
-       observe(): platform.captureScreen() → Observation{png}        // 无 SoM、无 getElements
+ └ team.run(task)        // team loop 推进 leader 的 Task
+     leader.tick: glm.complete(读 operator 回传的截图) → deliver_task(operator, "点登录按钮")
+       // leader 不自己截图——视觉只归 operator（GUIAgent）；多模态消费的是 operator 回传的图
+ └ operator 先经 lease 持有 desktop 工具面（Platform 在工具内部，不外露，§5.5）
+ └ operator.tick:
+     operator 组合 Observes + Grounds + Acts（经 desktop 工具面）：
+       observe(): desktop.captureScreen() → Observation{png}          // 无 SoM、无 getElements
        ground():  tars.ground(png,"点登录按钮") → click(x,y)         // 模型直接出像素
-       act():     platform.performClick(x,y)                          // 像素直达，不经 mark→coord
- └ 循环到该步完成 → release lease → 下一步
+       act():     desktop.performClick(x,y)                           // 像素直达，不经 mark→coord
+ └ 子任务完成 → 结果作为 deliver_task 的 tool_result 回传 leader → release lease
 ```
-**关键：operator 用像素坐标工具（非 mark）；grounding 由模型（GUI-TARS）完成，绕过 SoM；Leader 多模态看图只规划不操作；desktop 资源经 lease 独占持有。**
+**关键：operator 用像素坐标工具（非 mark）；grounding 由模型（GUI-TARS）完成，绕过 SoM；Leader 多模态、只规划不操作、不自己截图（图由 operator 回传）；desktop 经 lease 独占持有。**
 
 ## 4. 场景揭示的设计压力 → 核心洞察
 
@@ -94,11 +96,11 @@ Team     = createAgentTeam({ leader(glm), workers:[operator(tars)], resources:[s
 ### 5.1 纯动作接口（行为，可组合）
 
 ```ts
-/** 观察：产出当前世界的 Observation（GUI=截图(+可选 SoM)；纯文本=空）。 */
+/** 观察：产出当前世界的 Observation（GUI=截图(+可选 SoM)；纯文本=空）。✅ 仅 GUIAgent 组合——视觉截图接口的唯一具体感知者。 */
 interface Observes { observe(): Promise<Observation> }
-/** 规划：把目标（+可选观察）拆成有序子任务。Leader 的核心行为。 */
+/** 规划：✅ 已溶解——leader 不再一次性吐 Plan，而是 complete() + DeliverTask 边想边派（见 execution-model.md §2/§3）。 */
 interface Plans    { plan(goal: string, obs?: Observation): Promise<Plan> }
-/** 执行：在平台上落一个动作。需要一个 Platform（来自 agent 持有的 desktop 资源，§5.5）。 */
+/** 执行：经 desktop 工具面落一个动作；Platform 是工具内部资源，agent 不直接持有（§5.5）。 */
 interface Acts     { act(action: PlatformAction): Promise<ActionResult> }
 /** 像素级 grounding：截图 + 操作提示 → 像素动作（GUI-TARS 类模型）。 */
 interface Grounds  { ground(obs: Observation, hint: string): Promise<PlatformAction> }
@@ -141,72 +143,83 @@ Model 由 **Team 持有、Agent 引用**：可共享（场景一：leader 与 wr
 ### 5.3 Agent — 数据 + per-Agent PromptBuilder + 子接口继承
 
 ```ts
-interface AgentProfile {                 // 纯数据：能力宣告 + 路由依据
+interface AgentProfile {                 // 纯数据：能力宣告 + 路由依据 ✅
   id: string
+  role: 'leader' | 'worker'              // ✅
   specialties: Specialty[]               // 'planning'|'gui-operate'|'gui-ground'|'paint'|'coding'|...
-  models: Model[]                        // 绑定的模型
-  bio: string                            // 一句话自述，供 Leader / 路由器读
+  models: Model[]                        // 绑定的模型（v1 暂直用 CompleteFn，Model 对象后续落地）
+  bio: string                            // 一句话自述，**只注入 leader 的 PromptBuilder**（worker 互相不可见）
+  requires?: string[]                    // 需要独占持有的资源 id（如 desktop）— ✅ 已实现（§5.5）
 }
-interface Agent {
+interface TeamAgent {                    // ✅ 已实现（src/team.ts）
   readonly profile: AgentProfile
-  readonly promptBuilder: PromptBuilder  // per-Agent：按专长建提示 + 从 Team 池注入相关 Tools（§5.6）
+  createTask(goal, opts?): Task          // mint 一个本 agent 拥有的 Task（ownerId 绑定）
+  tick(task): Promise<TickOutcome>       // 推进一格——tick 形状 = 该 Agent 组合的行为（per-agent）
 }
 
-// 子接口继承 Agent，组合各自的能力接口（interface extends，非类继承）
-interface LeaderAgent extends Agent, Plans {}           // 规划统筹
-interface GUIAgent   extends Agent, Observes, Acts {}    // worker：高效 GUI（持有 desktop lease；可 SoM-mark 或 GUI-TARS grounding）
-interface PaintAgent extends Agent {}                     // worker：生成图片（绑图像模型）
+// leader 是**一族实现**（领域不同 → PromptBuilder / 模型 / 路由的 worker 不同）；一个团队**仅激活一个** leader ✅
+interface LeaderAgent   extends TeamAgent {}           // complete + DeliverTask 委派；不 observe（Plans 已溶解）
+interface GUILeaderAgent extends LeaderAgent {}        // 多模态：读 worker 回传的截图来规划（不自己 capture）
+interface CodeLeaderAgent extends LeaderAgent {}       // 纯文本/代码：无视觉
+interface GUIAgent    extends TeamAgent {}             // worker：视觉唯一感知者（observe/act 经 desktop 工具面）；持有 desktop lease
+interface PaintAgent  extends TeamAgent {}             // worker：生成图片（绑图像模型）
 // ……按专长扩展：CoderAgent / ResearchAgent / ...
 ```
 
 - 每个 Agent 一个 **PromptBuilder**：它擅长的任务不同 → 提示形状不同 + 相关 Tools 不同。
-- **Task 持有会话状态 + 生命周期**（`run`/`exec`/`pause`/`goto`/`save` 不变）；**一次 `exec` 做什么，委托给所绑 Agent 的组合行为**——`observe→complete→act` 不再写死，而是某类 GUIAgent 的行为（P1 落地点）。
+- **Task 持有会话状态 + 生命周期**；team loop 下，**一次 `tick` 做什么委托给所绑 Agent 的组合行为** ✅——`observe→complete→act` 不再写死，而是 GUIAgent 的 tick（P1 落地点；GUIAgent 的 tick 即旧 `exec()`，桥接复用，见 execution-model.md §2）。
 
 ### 5.4 AgentTeam — 多类型资源池 + 调度器（对外第一句柄 · 组合根 · Task 工厂）
 
 ```ts
-interface AgentTeam {
+interface AgentTeam {                        // ✅ 已实现（src/team.ts；本块是目标全貌，v1 先落地标注项）
   // 多类型资源池
-  readonly agents: ReadonlyMap<string, Agent>
-  readonly models: ReadonlyMap<string, Model>
-  readonly tools:  ReadonlyMap<string, Resource>    // web-search / local-rag / bash / skills / visual_scout ...
-  readonly tasks:  ReadonlyMap<string, Task>
-  readonly memoryStore: MemoryStore                 // 单例：全局记忆库
-  readonly resources: ResourceManager               // 能力查询 + 独占租赁（§5.5）
-  // Task 工厂 + 调度（按专长 + 资源可用性）
-  createTask(goal: string): Task
-  loadTask(id: string): Promise<Task | null>
-  dispatch(plan: Plan): Promise<TaskResult[]>
+  readonly agents: ReadonlyMap<string, TeamAgent>   // ✅
+  readonly models: ReadonlyMap<string, Model>       // 🔼
+  readonly tools:  ReadonlyMap<string, Resource>    // web-search / local-rag / bash / skills / MCP / visual_scout …（§5.5）
+  readonly tasks:  ReadonlyMap<string, Task>        // ✅
+  readonly memoryStore: MemoryStore                 // 🔼 单例：全局记忆库
+  readonly resources: ResourceManager               // ✅ 能力查询 + 独占租赁（§5.5）
+  readonly roster: TeamRoster                       // ✅ worker 花名册（只喂给 leader）
+  readonly leaderId: string                         // ✅ 单 leader
+  // Task 工厂 + 调度
+  createTask(goal, opts?): Task                     // ✅ ownerId 默认 leader
+  run(task, opts?): Promise<TaskResult>             // ✅ team loop 跑到终态（取代旧 dispatch(plan)）
 }
 ```
 
-Team 把目标交给 Leader 规划，再按各 Agent 专长 **和资源可用性**（独占资源是否空闲）调度子任务。
+> **派发模型已变（见 [`execution-model.md`](./execution-model.md)）**：原 `Team.dispatch(plan)`（Team 把 leader 的 `Plan` 物化成子任务）**已废弃**——派发收归 leader 自己：它在 `tick` 里调 `deliver_task` 把子任务投给 worker、挂起自己；team loop 在子任务终态后机械完成、重载 leader。`AgentTeam.run(task)` 即「在 team loop 下把（leader 的）根 Task 跑到终态」。
 
-### 5.5 Resources & Tools — 共享 vs 独占租赁 🆕
+Team 把目标交给 Leader，leader 经 `deliver_task` 委派；team loop 按「专长 + 资源可用性」（独占资源是否空闲）调度可推进的 Task。
+
+### 5.5 Resources & Tools — 共享 vs 独占租赁；Platform 是工具的内部资源 ✅
 
 池里每个资源带**能力描述**（PromptBuilder 选择依据）和**访问语义**：
 
 ```ts
-type ResourceKind = 'service' | 'desktop' | 'image' | ...
-interface Resource {
+type ResourceKind = 'service' | 'desktop' | 'image' | 'mcp' | 'skill' | ...
+interface Resource {                       // ✅
   readonly id: string
-  readonly capability: string          // 人/模型可读：做什么
-  readonly exclusive: boolean          // 独占？
+  readonly capability: string              // 人/模型可读：做什么
+  readonly exclusive: boolean              // 独占？
   readonly kind: ResourceKind
 }
-interface Lease { readonly resource: string; readonly holder: string /* agentId */ }
+interface Lease { readonly resource: string; readonly holder: string /* agentId */ }   // ✅
 
-interface ResourceManager {
-  select(need: string): Resource[]                                   // PromptBuilder 按能力挑相关资源
-  acquire(resId: string, agentId: string): Promise<Lease | null>     // 独占：拿到 / 被占（可排队）
+interface ResourceManager {                // ✅ src/resources.ts
+  acquire(resId: string, holder: string): Lease | null     // 独占：拿到 / 被占返回 null
   release(lease: Lease): void
+  holder(resId: string): string | undefined
+  select(need: string): Resource[]                         // 🔼 PromptBuilder 按能力挑相关资源
 }
 ```
 
-- **共享 service tools**（`exclusive:false`）：web-search、local-rag、bash、skills 管理器——可并发（可能限流），任何 agent 经 tool-call 调用。
-- **独占 desktop 资源**（`exclusive:true`）：`visual_scout` server，接管一个桌面（本地或远程），**一时刻仅一个 agent 持有**。`acquire` 成功后给持有者一个 **Platform**（capture + input）——这就是 GUIAgent 的 `Acts` 落点。
-- **visual_scout 的双重身份**：它既是池里的一种「Tool / 资源」（被调度、被 lease），又是 GUIAgent 的 **Platform 来源**。模型里用 `kind:'desktop'` 区分：它产出 Platform，而非像 service tool 那样产出 tool-call 结果。
-- 独占租赁把原 §7「Platform 并发竞争」从难题变成**资源语义**：桌面天然独占，调度器保证唯一持有者。
+- **共享 service tools**（`exclusive:false`）：web-search、local-rag、bash、**MCP server**、**skills** 管理器——可并发（可能限流），任何 agent 经 tool-call 调用。
+- **独占 desktop 资源**（`exclusive:true`）：接管一个桌面（本地或远程），**一时刻仅一个 agent 持有**。`acquire` 返回的是一个 **`Lease`（令牌）**，**不是 Platform**——持有者的 Task 因此被允许推进；team loop 保证独占性（非持有者的 Task 本 round 跳过）。
+- **Platform 是工具的内部资源** ✅：desktop 资源在内部拥有 `Platform`（PipeWire capture / uinput input），并把它包装成一个 **`DesktopTool`**（实现 `Platform` 接口）注入到 GUIAgent 的核心 Agent；agent 永远只见 `DesktopTool`（工具面），**不见原始 Platform**——正如 web-search 工具内部持有 HTTP client。`acquire`/`release` 管的是「谁的 Task 可以推进」，Platform 本身始终在工具内部、不外露。
+- **visual_scout 不再有「双重身份」问题**（原 §10 已决）：它就是一个 desktop 资源（`DesktopTool`），Platform 是其内部资源。`kind:'desktop'` 仅说明它经 lease 独占、且其工具面是 `Platform` 形状。
+- **配置**：每个内置 tool 的属性（启用 / 参数 / 连接信息）由配置文件（`vrover.conf`）管理；`createAgentTeam` 读配置实例化它们。用户可在配置里挂**自己的 MCP server 与 skills**，它们成为池中的共享工具，由 PromptBuilder 注入相关 agent 的提示（§5.6）。
+- 独占租赁把原 §7「Platform 并发竞争」从难题变成**资源语义**：桌面天然独占，调度器保证唯一持有者的 Task 在跑。
 
 ### 5.6 PromptBuilder — per-Agent，Team-aware 🔼
 
@@ -217,8 +230,9 @@ interface PromptBuilder {
 ```
 
 - 每个 Agent 一个，按 agent 专长构造提示形状。
-- 它**查询 Team 资源池**（`resources.select(need)`），把**相关的 service tools** schema 注入提示（动态工具注入，对齐项目 [decisions.md](../../docs/decisions.md) D8）。
+- 它**查询 Team 资源池**（`resources.select(need)`），把**相关的 service tools** schema 注入提示——工具来源 = **内置 tools（属性由 `vrover.conf` 管）+ 用户配置的 MCP server + skills**（动态工具注入，对齐项目 [decisions.md](../../docs/decisions.md) D8）。v1 leader 的 PromptBuilder 是 `renderLeaderSystem(roster)` 的简化版（注入 worker 花名册 + `deliver_task`/`finish`），完整 PromptBuilder 后续落地。
 - 对 **desktop 资源**：仅当本 agent 持有 lease 时，才注入其 GUI 工具面。
+- **信息流**：worker 的 `bio`/`specialties` 只进 **leader** 的 PromptBuilder（worker 互相不可见 → 单 leader 树、无横向委派）。
 - 取代现 `PromptRegistry`（模板部分保留为 PromptBuilder 的一个数据源）。
 
 ### 5.7 Engine / ContextManager / 记忆
@@ -273,7 +287,9 @@ function createPaintAgent(deps): PaintAgent
 7. **资源池 + `ResourceManager`**：把 tools / models / desktop 收进池；`visual_scout` 作为独占 desktop 资源 + Platform 来源；acquire/release 租赁。
 8. Team 级并发调度（按专长 + 资源可用性）。
 
-> 退化等价：`createAgent(opts).run(goal)`（今天）≡ 单 Agent Team、无 Leader、无资源池的 `team.dispatch(plan)`（明天）。
+> **落地进度（✅ 已做）**：team loop + `tick` + 写锁 + `DeliverTask`（含 fan-out）覆盖了上面的 2、6、8 的执行层（见 [`execution-model.md`](./execution-model.md) 与 `src/team.ts`）；`ResourceManager` + `Lease` + `DesktopTool`（独占 desktop、Platform 内藏于工具）覆盖了 7 的资源层（`src/resources.ts`）。**未做**：1（`Grounds`/GUI-TARS）、3（`Model` 对象，v1 直用 `CompleteFn`）、4（`ContextManager`/完整 `PromptBuilder`）、5（`Brain`→`Engine` 显式化）、`MemoryStore` 全局层、MCP/skills 的真实接入与 `vrover.conf` 工具属性。
+>
+> 退化等价：`createAgent(opts).run(goal)`（今天）≡ 单 Agent Team、无 Leader、无资源池的 `team.run(task)`（v1 已具备此形状）。
 
 ## 9. 设计原则（延续项目既有 + 本包风格）
 
@@ -287,11 +303,11 @@ function createPaintAgent(deps): PaintAgent
 - **能力宣告 / 资源能力描述格式**：`specialties` 固定枚举 vs 自由标签？`Resource.capability` 怎么写让 PromptBuilder 与 Leader 模型都能读？
 - **路由 + 调度策略**：能力匹配规则 vs 让 Leader 模型决定？独占资源被占时排队 vs 改派？
 - **独占租赁粒度**：lease 超时 / 抢占 / 排队顺序？崩溃后回收？
-- **`Plan` 结构**：步骤间是否带依赖（DAG）？是否声明建议的 worker specialty？
+- **`Plan` 结构**：✅ 已溶解——leader 不再产出完整 `Plan`，而是 `complete()` + `deliver_task` 边想边派（fan-out 已支持，wait-for-all）。DAG 形态留待需要时再加。
 - **step 策略的抽象边界**：委托给 Agent 的「step 形状」用哪种抽象（一个 `Stepper` 接口？还是直接组合 `Observes/Completes/Acts` 由 Agent 自行编排）？
 - **`Grounds` vs `Completes` 模型边界**：一个模型同时支持两种能力时如何暴露？
 - **像素 vs mark 工具面**：SoM-mark 型 GUIAgent 的 mark→像素胶水（现 `@vrover/tools` dispatch）归 Worker 组合，还是保留为可复用件？
-- **visual_scout 双重身份**：作为「资源/Tool」与作为「Platform 来源」的接口如何分界（`kind:'desktop'` 够不够）？
+- **visual_scout 双重身份**：✅ 已决——它就是一个 desktop 资源（`DesktopTool`），Platform 是其内部资源；`acquire` 返回 `Lease` 令牌（不返回 Platform），持有者的 Task 被允许推进。原「资源 vs Platform 来源」的分界问题消失。
 - **PromptBuilder 的相关性判定**：用什么策略从池里挑「相关」tools 注入（关键词 / embedding / 让模型自选）？
 - **Agent 间接力**：Task 在 Agent 间传递时，ContextManager 如何跟着 Task 走、窗口策略如何平滑切换。
 - **共享资源限流 / Model 并发**：web-search / bash 的并发上限、同一 Model 多请求的连接池。

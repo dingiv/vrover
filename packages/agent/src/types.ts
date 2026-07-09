@@ -3,6 +3,7 @@ import type { CompleteFn, Message, ToolDef } from '@vrover/llm';
 import type { NativeParser } from '@vrover/native';
 import type { SoMElement } from '@vrover/som';
 import type { DispatchResult } from '@vrover/tools';
+import type { ChatModel } from './model.js';
 
 /**
  * Resolves one model tool call against the current SoM table on a {@link Platform}. Mirrors
@@ -43,7 +44,7 @@ export interface TaskResult {
 }
 
 /** Lifecycle of a {@link Task}. */
-export type AgentStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
+export type AgentStatus = 'idle' | 'running' | 'suspended' | 'paused' | 'done' | 'error';
 
 // ── streaming events ─────────────────────────────────────────────────────────
 
@@ -88,6 +89,15 @@ export interface TaskSnapshot {
   steps: AgentStep[];
   status: AgentStatus;
   result?: TaskResult;
+  /** Owner agent id; absent on legacy snapshots (defaults to ''). */
+  ownerId?: string;
+}
+
+/** Why a task is `suspended`: the pending delegation it is waiting on (team loop only). */
+export interface TaskSuspendState {
+  readonly toolUseId: string;
+  readonly subtaskId: string;
+  readonly workerId: string;
 }
 
 /**
@@ -132,6 +142,12 @@ export interface Task {
   readonly result?: TaskResult;
   /** True when the agent was created with single-step debug mode. */
   readonly singleStep: boolean;
+  /** The agent that owns (writes) this task — the write-lock holder. Defaults to ''. */
+  readonly ownerId: string;
+  /** Pending delegations while `status === 'suspended'` (empty when not suspended). Fan-out: may be >1. */
+  readonly suspendedOn: readonly TaskSuspendState[];
+  /** State-derived: the team loop may tick this task (active and no pending delegations). */
+  readonly runnable: boolean;
 
   run(opts?: { maxSteps?: number }): Promise<TaskResult>;
   exec(opts?: { message?: string }): Promise<AgentStep | null>;
@@ -140,6 +156,16 @@ export interface Task {
   /** Single-step continue: advance a single-stepping loop by one iteration (symmetric to `pause()`). */
   step(): void;
   save(): Promise<void>;
+
+  // ── external-driver seam (used by the team loop; inert for the standalone GUI loop) ──
+  /** Append a verbatim message to history (leader turns, injected tool_results). */
+  append(message: Message): void;
+  /** Set the lifecycle status (team loop drives suspended/done/error for externally-driven tasks). */
+  markStatus(status: AgentStatus): void;
+  /** Set the terminal result (paired with `markStatus('done' | 'error')` for externally-driven tasks). */
+  setResult(result: TaskResult): void;
+  /** Replace the pending-delegation list (pass `[]` to clear — resumes the task). */
+  setSuspend(states: readonly TaskSuspendState[]): void;
 
   /** Subscribe to streaming progress events (step / log / done / error / paused). */
   on(listener: TaskListener): void;
@@ -159,8 +185,13 @@ export interface Task {
  */
 export interface AgentDeps {
   platform: Platform;
-  /** The LLM exit point (real adapter or a fake for tests). */
-  complete: CompleteFn;
+  /**
+   * The LLM exit point (real adapter or a fake for tests). Legacy: prefer `model`. If `model` is
+   * absent, this is wrapped into a `ChatModel` internally (the §8 step-3 migration).
+   */
+  complete?: CompleteFn;
+  /** A first-class chat model. Takes precedence over `complete` when both are supplied. */
+  model?: ChatModel;
   /** Override the default system prompt. */
   systemPrompt?: string;
   /** Tool surface handed to the model. Defaults to `TOOL_DEFS` from `@vrover/tools`. */
@@ -214,7 +245,7 @@ export interface AgentOptions extends AgentDeps {
 export interface Agent {
   /** The persistence backend, if any. */
   readonly memory: MemoryManager | undefined;
-  createTask(goal: string, opts?: { id?: string }): Task;
+  createTask(goal: string, opts?: { id?: string; ownerId?: string }): Task;
   loadTask(id: string): Promise<Task | null>;
   run(goal: string, opts?: { maxSteps?: number }): Promise<TaskResult>;
 }

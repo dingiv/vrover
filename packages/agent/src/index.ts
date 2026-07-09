@@ -29,3 +29,54 @@ export type {
 export { RemotePlatform } from './remote.js';
 export { PromptRegistry, prompts, render } from './prompts/index.js';
 export type { PromptName, PromptVars } from './prompts/index.js';
+// ── multi-agent execution layer (team loop · write lock · DeliverTask) ──
+export {
+  createAgentTeam,
+  createLeaderAgent,
+  createGUIAgent,
+  createGroundingAgent,
+  DELIVER_TASK_TOOL,
+} from './team.js';
+export {
+  createDesktopTool,
+  createResourceManager,
+} from './resources.js';
+export type {
+  DesktopTool,
+  Lease,
+  Resource,
+  ResourceManager,
+  ResourceKind,
+} from './resources.js';
+export type {
+  AgentProfile,
+  AgentTeam,
+  AgentTeamDeps,
+  DelegateIntent,
+  DelegateResolution,
+  DeliverTaskInput,
+  DeliverTaskResult,
+  GUIAgent,
+  GUIAgentDeps,
+  GroundingAgentDeps,
+  LeaderAgent,
+  LeaderAgentDeps,
+  TeamAgent,
+  TeamLoop,
+  TeamRoster,
+  TickOutcome,
+} from './team.js';
+export type { TaskSuspendState } from './types.js';
+// ── model + action interfaces (design.md §5.1/§5.2) ──
+export { createChatModel, createGroundingModel } from './model.js';
+export type { ChatModel, ChatModelDeps, GroundFn, GroundingModel, GroundingModelDeps, Modality, Model } from './model.js';
+export { captureObservation, performPlatformAction } from './actions.js';
+export type {
+  Acts,
+  ActionResult,
+  Completes,
+  Grounds,
+  Observation,
+  Observes,
+  PlatformAction,
+} from './actions.js';

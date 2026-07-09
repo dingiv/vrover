@@ -7,12 +7,23 @@ export interface VroverConfig {
 
 export interface LlmSection {
   /** Which provider to use. */
-  provider: 'glm' | 'openai' | 'vllm' | 'custom' | 'anthropic';
+  provider: 'glm' | 'openai' | 'vllm' | 'custom' | 'anthropic' | 'deepseek';
   anthropic: AnthropicConfig;
   glm: GlmConfig;
   openai: OpenAiConfig;
   vllm: VllmConfig;
   custom: CustomConfig;
+  deepseek: DeepSeekConfig;
+}
+
+/**
+ * DeepSeek — reached via its Anthropic-compatible endpoint (`/anthropic/v1/messages`),
+ * so it shares the Anthropic wire format but with its own base URL / model / key.
+ */
+export interface DeepSeekConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
 }
 
 export interface AnthropicConfig {

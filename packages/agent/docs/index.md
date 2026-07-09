@@ -1,6 +1,6 @@
 # Agent 模块
 
-> `@vrover/agent` — VRover 的大脑。本文是模块总览与概念地图；目标模型的完整论述与场景验证见 [design.md](./design.md)。
+> `@vrover/agent` — VRover 的大脑。本文是模块总览与概念地图；目标模型的完整论述与场景验证见 [design.md](./design.md)，**执行层（team loop / 写锁 / DeliverTask / 资源租赁）的类型草案与运行机制见 [execution-model.md](./execution-model.md)**（✅ 已落地：`src/team.ts` + `src/resources.ts`）。
 > 项目级：已落地架构见 [`../../docs/architecture.md`](../../docs/architecture.md)（代码为准），长期构想见 [`../../docs/design.md`](../../docs/design.md)，待定决策见 [`../../docs/decisions.md`](../../docs/decisions.md)。
 
 ## 一句话
