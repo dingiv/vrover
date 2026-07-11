@@ -18,6 +18,7 @@
 //! `Platform` contract (`packages/platform/src/desktop.ts`) so a future napi-rs
 //! binding can lift a `CaptureSource` + `InputSink` pair into it verbatim.
 
+pub mod audio;
 pub mod capture;
 pub mod control;
 pub mod error;
@@ -40,3 +41,5 @@ pub use mock::{MockCaptureSource, RecordedEvent, RecordingInputSink};
 // Feature-gated backend re-exports (convenience for the napi binding crate).
 #[cfg(feature = "uinput")]
 pub use backends::uinput::{UinputSink, UinputSinkBuilder};
+// media (file-backed mock) is always compiled — no native build deps.
+pub use backends::media::{MediaAudioSource, MediaVideoSource};

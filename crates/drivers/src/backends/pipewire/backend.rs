@@ -18,8 +18,10 @@
 //! - cursor-mode / restore-token knobs exposed via [`PipeWireSourceBuilder`].
 
 use std::os::unix::io::OwnedFd;
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use ashpd::desktop::screencast::{CursorMode, Screencast, SourceType};
 use ashpd::desktop::PersistMode;
@@ -35,6 +37,19 @@ use pipewire::spa::utils::{Direction, Fraction, Rectangle, SpaTypes};
 use pipewire::stream::{Stream, StreamFlags};
 use pipewire::thread_loop::ThreadLoop;
 use crate::{CaptureSource, DriverError, Frame, Result};
+
+/// Cap on how many frames/second we actually copy + decode, even when the
+/// compositor pushes faster (e.g. 60fps). Excess buffers are dequeued (returned
+/// to the producer, so no backpressure) but not decoded → caps our CPU.
+const TARGET_FPS: u32 = 24;
+/// Minimum interval between decoded frames: `1 / TARGET_FPS` (~41.6ms at 24fps).
+const MIN_FRAME_INTERVAL: Duration = Duration::from_nanos(1_000_000_000 / TARGET_FPS as u64);
+
+/// Pause/resume command sent to the pipewire worker thread.
+#[derive(Debug, Clone, Copy)]
+enum Cmd {
+    Active(bool),
+}
 
 /// Builder for [`PipeWireSource`].
 #[derive(Debug, Clone)]
@@ -74,19 +89,28 @@ impl PipeWireSourceBuilder {
 /// Latest decoded frame + any fatal worker error.
 #[derive(Default)]
 struct Shared {
-    frame: Option<Frame>,
-    error: Option<String>,
+    /// Reused BGRA pixel buffer — resized once, copied into each decoded frame
+    /// (avoids a per-frame ~39MB allocation). [`capture`] clones it on demand.
+    frame_buf: Vec<u8>,
     /// Negotiated stream geometry, learned from the first `Format`
     /// `param_changed`. [`decode_frame`] decodes against this (not the
     /// portal-reported size, which may differ once the node fixates).
     dims: Option<(u32, u32)>,
+    /// Has at least one frame been decoded into `frame_buf`?
+    frame_ready: bool,
+    /// Last decoded-frame time, for the [`TARGET_FPS`] throttle.
+    last_decode: Option<Instant>,
+    error: Option<String>,
 }
 
 /// A PipeWire-backed [`CaptureSource`].
 pub struct PipeWireSource {
     latest: Arc<Mutex<Shared>>,
     dims: Option<(u32, u32)>,
-    /// Keeps the pipewire [`ThreadLoop`] (and its stream) alive; the worker parks.
+    /// Pause/resume channel to the pipewire worker (`None` if negotiation failed).
+    ctl: Option<mpsc::Sender<Cmd>>,
+    /// Keeps the pipewire [`ThreadLoop`] (and its stream) alive; the worker serves
+    /// [`Cmd`]s until this sender is dropped.
     worker: Option<JoinHandle<()>>,
 }
 
@@ -145,11 +169,12 @@ impl PipeWireSource {
 
         // 2. Spawn the pipewire thread owning the loop + stream.
         let latest = Arc::new(Mutex::new(Shared::default()));
-        let worker = spawn_pipewire(fd, node_id, dims, Arc::clone(&latest));
+        let (worker, ctl) = spawn_pipewire(fd, node_id, dims, Arc::clone(&latest));
 
         Ok(Self {
             latest,
             dims,
+            ctl: Some(ctl),
             worker: Some(worker),
         })
     }
@@ -173,10 +198,32 @@ impl CaptureSource for PipeWireSource {
         if let Some(ref err) = shared.error {
             return Err(DriverError::Session(err.clone()));
         }
-        shared
-            .frame
-            .clone()
-            .ok_or_else(|| DriverError::Session("no frame yet (waiting for first pipewire buffer)".into()))
+        if !shared.frame_ready {
+            return Err(DriverError::Session(
+                "no frame yet (waiting for first pipewire buffer)".into(),
+            ));
+        }
+        let (w, h) = shared
+            .dims
+            .ok_or_else(|| DriverError::Session("stream geometry not negotiated yet".into()))?;
+        Frame::new(w, h, shared.frame_buf.clone())
+    }
+
+    /// Pause (`false`) or resume (`true`) the PipeWire stream. Pausing makes the
+    /// producer (Mutter) stop pushing frames → ~zero capture cost while idle.
+    /// No-op in the failed state.
+    fn set_active(&self, active: bool) {
+        if let Some(tx) = &self.ctl {
+            let _ = tx.send(Cmd::Active(active));
+        }
+    }
+
+    /// Drop the cached latest frame so callers block until a fresh one arrives
+    /// (used after resuming an idle-paused stream, to avoid serving a stale frame).
+    fn clear_frame(&self) {
+        if let Ok(mut g) = self.latest.lock() {
+            g.frame_ready = false;
+        }
     }
 }
 
@@ -193,13 +240,16 @@ impl PipeWireSource {
     /// A non-functional source used only by [`Default`] when the portal is absent.
     fn failed() -> Self {
         let latest = Arc::new(Mutex::new(Shared {
-            frame: None,
-            error: Some("PipeWire negotiation failed (no portal / not on a graphical session)".into()),
+            frame_buf: Vec::new(),
             dims: None,
+            frame_ready: false,
+            last_decode: None,
+            error: Some("PipeWire negotiation failed (no portal / not on a graphical session)".into()),
         }));
         Self {
             latest,
             dims: None,
+            ctl: None,
             worker: None,
         }
     }
@@ -214,8 +264,9 @@ fn spawn_pipewire(
     node_id: u32,
     dims: Option<(u32, u32)>,
     latest: Arc<Mutex<Shared>>,
-) -> JoinHandle<()> {
-    thread::spawn(move || {
+) -> (JoinHandle<()>, mpsc::Sender<Cmd>) {
+    let (tx, rx) = mpsc::channel::<Cmd>();
+    let worker = thread::spawn(move || {
         // Portal-reported geometry — used as the default in the EnumFormat size
         // range below. The actually-negotiated size arrives via param_changed and
         // is what decode_frame uses (see Shared::dims).
@@ -354,11 +405,15 @@ fn spawn_pipewire(
         }
 
         drop(_lock);
-        // Stay alive so the ThreadLoop + stream outlive setup.
-        loop {
-            thread::park();
+        // Serve pause/resume commands until the source is dropped (the sender
+        // drops → recv returns Err → we exit, tearing down the stream + loop).
+        while let Ok(Cmd::Active(active)) = rx.recv() {
+            let _g = tl.lock();
+            let _ = stream.set_active(active);
         }
-    })
+    });
+
+    (worker, tx)
 }
 
 /// Decode the first data plane of the dequeued buffer as BGRx/BGRA → BGRA [`Frame`].
@@ -385,16 +440,30 @@ fn decode_frame(stream: &pipewire::stream::StreamRef, latest: &Arc<Mutex<Shared>
     if bytes.len() < need {
         return;
     }
-    let mut out = bytes[..need].to_vec();
+    // `buf` drops at scope end → the buffer returns to the producer (no
+    // backpressure), so the compositor keeps its own cadence; we only do the
+    // expensive copy/decode when the TARGET_FPS throttle allows.
+    let now = Instant::now();
+    let mut g = match latest.lock() {
+        Ok(g) => g,
+        Err(_) => return,
+    };
+    if g.last_decode
+        .map(|t| now.duration_since(t) < MIN_FRAME_INTERVAL)
+        .unwrap_or(false)
+    {
+        return; // too soon since the last decoded frame — drop this one
+    }
+    g.last_decode = Some(now);
+    // Reuse the buffer (resize is a no-op after the first frame → no per-frame
+    // ~39MB allocation).
+    g.frame_buf.resize(need, 0);
+    g.frame_buf.copy_from_slice(&bytes[..need]);
     // BGRx has an undefined pad byte; force opaque alpha for both BGRx and BGRA.
-    for px in out.chunks_exact_mut(4) {
+    for px in g.frame_buf.chunks_exact_mut(4) {
         px[3] = 255;
     }
-    if let Ok(frame) = Frame::new(w, h, out) {
-        if let Ok(mut g) = latest.lock() {
-            g.frame = Some(frame);
-        }
-    }
+    g.frame_ready = true;
 }
 
 fn fail(latest: &Arc<Mutex<Shared>>, msg: impl Into<String>) {

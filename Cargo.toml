@@ -12,6 +12,7 @@ members = [
     "crates/drivers",
     "crates/native",
     "crates/omniparser",
+    "crates/visual-scout",
 ]
 
 [workspace.package]

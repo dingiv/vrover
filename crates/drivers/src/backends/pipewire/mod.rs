@@ -21,11 +21,15 @@
 mod stub;
 #[cfg(feature = "pipewire")]
 mod backend;
+#[cfg(feature = "pipewire")]
+mod audio;
 
 #[cfg(not(feature = "pipewire"))]
 pub use stub::{PipeWireSource, PipeWireSourceBuilder};
 #[cfg(feature = "pipewire")]
 pub use backend::{PipeWireSource, PipeWireSourceBuilder};
+#[cfg(feature = "pipewire")]
+pub use audio::PipeWireAudioSource;
 
 #[cfg(test)]
 mod tests {

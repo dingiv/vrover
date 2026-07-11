@@ -2720,6 +2720,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vrover-visual-scout"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "vrover-drivers",
+]
+
+[[package]]
 name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

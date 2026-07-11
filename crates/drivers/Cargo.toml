@@ -40,3 +40,16 @@ required-features = ["pipewire"]
 [[example]]
 name = "uinput_probe"
 required-features = ["uinput"]
+
+# Subscribes to the PipeWire mic (16 kHz mono S16LE), drains ~3 s, reports the
+# negotiated format + achieved byte rate. Needs the `pipewire` feature + a
+# running PipeWire daemon (no physical mic required to verify the pipeline).
+[[example]]
+name = "audio_one"
+required-features = ["pipewire"]
+
+# Media-backend sanity check: capture 2 video frames (confirm they differ) +
+# drain ~2 s of audio. Always compiled (media has no build deps); needs the
+# ffmpeg/ffprobe binaries + a media file arg at runtime.
+[[example]]
+name = "media_play"
