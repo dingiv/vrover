@@ -19,11 +19,11 @@
 
 use std::io::Read;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, SyncSender, TrySendError};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::mpsc::{self, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::audio::{AudioFormat, AudioSource, AudioSubscription};
 use crate::capture::CaptureSource;
@@ -290,157 +290,127 @@ fn video_worker(
 
 // ── audio ────────────────────────────────────────────────────────────────────
 
-struct AudioShared {
-    subscribers: Vec<(u64, SyncSender<Arc<[u8]>>)>,
-    error: Option<String>,
-}
-
-/// File-backed mock [`AudioSource`]: decodes the file's audio track to 16 kHz
-/// mono S16LE, looping forever, paused when set inactive / no subscribers.
+/// File-backed mock [`AudioSource`]: decodes the ENTIRE file to 16 kHz mono S16LE
+/// PCM **once** at construction (one-shot ffmpeg, no realtime pacing, no loop).
+/// Each subscriber gets its own **independent replay from the beginning**, paced
+/// to realtime, one-shot (stops at the end — no loop). This makes tests
+/// reproducible: every client hears the same audio from the same starting point.
 pub struct MediaAudioSource {
-    shared: Arc<Mutex<AudioShared>>,
-    active: Arc<AtomicBool>,
-    stop: Arc<AtomicBool>,
-    worker: Option<JoinHandle<()>>,
+    pcm: Arc<Vec<u8>>,
+    active_count: Arc<AtomicUsize>,
 }
 
 impl MediaAudioSource {
-    /// Start the realtime-looping audio feeder. Errors only on thread spawn
-    /// failure; a missing audio track surfaces later (subscribe returns Err /
-    /// the stream stays silent).
     pub fn new(path: &str) -> Result<Self> {
-        let shared = Arc::new(Mutex::new(AudioShared {
-            subscribers: Vec::new(),
-            error: None,
-        }));
-        let active = Arc::new(AtomicBool::new(true));
-        let stop = Arc::new(AtomicBool::new(false));
-        let worker = {
-            let path = path.to_string();
-            let shared = Arc::clone(&shared);
-            let active = Arc::clone(&active);
-            let stop = Arc::clone(&stop);
-            thread::Builder::new()
-                .name("vrover-media-audio".into())
-                .spawn(move || audio_worker(&path, &shared, &active, &stop))
-                .map_err(|e| DriverError::Session(format!("audio worker spawn: {e}")))?
-        };
+        let mut child = spawn_audio_ffmpeg_oneshot(path)
+            .map_err(|e| DriverError::Session(format!("ffmpeg audio spawn: {e}")))?;
+        let mut pcm = Vec::new();
+        child
+            .stdout
+            .take()
+            .expect("piped stdout")
+            .read_to_end(&mut pcm)
+            .map_err(|e| DriverError::Session(format!("ffmpeg audio read: {e}")))?;
+        let _ = child.wait();
+        if pcm.is_empty() {
+            return Err(DriverError::Session(format!(
+                "ffmpeg produced no audio from {path}"
+            )));
+        }
+        let dur = pcm.len() as f64 / (16000.0 * 2.0);
+        eprintln!("[media-audio] decoded {path}: {} bytes ({dur:.1}s @ 16k mono)", pcm.len());
         Ok(Self {
-            shared,
-            active,
-            stop,
-            worker: Some(worker),
+            pcm: Arc::new(pcm),
+            active_count: Arc::new(AtomicUsize::new(0)),
         })
     }
 }
 
 impl AudioSource for MediaAudioSource {
-    /// Always 16 kHz mono — we request exactly that from ffmpeg.
     fn format(&self) -> Option<AudioFormat> {
-        Some(AudioFormat {
-            rate: 16_000,
-            channels: 1,
-        })
+        Some(AudioFormat { rate: 16_000, channels: 1 })
     }
 
-    fn set_active(&self, active: bool) {
-        self.active.store(active, Ordering::Relaxed);
-    }
+    /// No-op: per-subscriber threads are independently paced. The idle ticker
+    /// checks `subscriber_count` to decide pausing — that's enough.
+    fn set_active(&self, _active: bool) {}
 
     fn subscribe(&self) -> Result<AudioSubscription> {
-        let mut g = self
-            .shared
-            .lock()
-            .map_err(|_| DriverError::Backend("audio shared mutex poisoned".into()))?;
-        if let Some(ref e) = g.error {
-            return Err(DriverError::Session(e.clone()));
-        }
-        let id = NEXT_SUB.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = mpsc::sync_channel::<Arc<[u8]>>(SUBSCRIBER_BUF);
-        g.subscribers.push((id, tx));
-        let shared_weak = Arc::downgrade(&self.shared);
+        let pcm = Arc::clone(&self.pcm);
+        let active_count = Arc::clone(&self.active_count);
+        active_count.fetch_add(1, Ordering::Relaxed);
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let stop_for_thread = Arc::clone(&stop);
+
+        thread::Builder::new()
+            .name("vrover-media-audio-replay".into())
+            .spawn(move || replay_from_start(&pcm, tx, &stop_for_thread, &active_count))
+            .map_err(|e| DriverError::Session(format!("replay thread spawn: {e}")))?;
+
+        let stop_for_unsub = Arc::clone(&stop);
+        let active_count_unsub = Arc::clone(&self.active_count);
         let unsub = Box::new(move || {
-            if let Some(shared) = shared_weak.upgrade() {
-                if let Ok(mut g) = shared.lock() {
-                    g.subscribers.retain(|(sid, _)| *sid != id);
-                }
-            }
+            stop_for_unsub.store(true, Ordering::Relaxed);
+            // The replay thread will also dec-count on exit; but do it here too in case
+            // the thread is sleeping.
+            active_count_unsub.fetch_sub(1, Ordering::Relaxed);
         });
         Ok(AudioSubscription::new(rx, unsub))
     }
 
     fn subscriber_count(&self) -> usize {
-        self.shared
-            .lock()
-            .map(|g| g.subscribers.len())
-            .unwrap_or(0)
+        self.active_count.load(Ordering::Relaxed)
     }
 }
 
-impl Drop for MediaAudioSource {
-    fn drop(&mut self) {
-        self.stop.store(true, Ordering::Relaxed);
-        self.active.store(true, Ordering::Relaxed);
-        let _ = self.worker.take();
-    }
-}
-
-/// Continuously read 16 kHz mono S16LE chunks from ffmpeg and fan them out to
-/// subscribers while `active`; respawn on EOF; exit when `stop`. ffmpeg's `-re`
-/// paces to realtime.
-fn audio_worker(
-    path: &str,
-    shared: &Arc<Mutex<AudioShared>>,
-    active: &AtomicBool,
+/// Replay the in-memory PCM from the beginning at realtime pace, one-shot. Sends
+/// 20ms chunks via the bounded channel; stops at EOF or when `stop` is set.
+fn replay_from_start(
+    pcm: &[u8],
+    tx: SyncSender<Arc<[u8]>>,
     stop: &AtomicBool,
+    active_count: &AtomicUsize,
 ) {
-    while !stop.load(Ordering::Relaxed) {
-        if !active.load(Ordering::Relaxed) {
-            thread::sleep(POLL_INACTIVE);
-            continue;
+    let bytes_per_sec: usize = 16000 * 2; // 16kHz mono S16LE
+    let chunk_bytes = bytes_per_sec * 20 / 1000; // 20ms = 640 bytes
+    let start = Instant::now();
+    let mut offset = 0;
+
+    while !stop.load(Ordering::Relaxed) && offset < pcm.len() {
+        let end = (offset + chunk_bytes).min(pcm.len());
+        let chunk: Arc<[u8]> = Arc::from(&pcm[offset..end]);
+        if tx.send(chunk).is_err() {
+            break; // client disconnected
         }
-        let mut child = match spawn_audio_ffmpeg(path) {
-            Ok(c) => c,
-            Err(e) => return fail(shared, format!("ffmpeg spawn: {e}")),
-        };
-        let mut stdout = child.stdout.take().expect("piped stdout");
-        let mut got_any = false;
-        while !stop.load(Ordering::Relaxed) && active.load(Ordering::Relaxed) {
-            let mut buf = vec![0u8; AUDIO_CHUNK];
-            match stdout.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => {
-                    got_any = true;
-                    let chunk: Arc<[u8]> = Arc::from(&buf[..n]);
-                    fan_out(shared, chunk);
-                }
-                Err(_) => break,
-            }
-        }
-        let _ = child.kill();
-        let _ = child.wait();
-        if !got_any && !stop.load(Ordering::Relaxed) {
-            return fail(shared, format!("ffmpeg produced no audio from {path}"));
+        offset = end;
+
+        // Pace to realtime: if audio consumed > wall time elapsed, sleep the diff.
+        let audio_ms = (offset as u64 * 1000) / bytes_per_sec as u64;
+        let wall_ms = start.elapsed().as_millis() as u64;
+        if audio_ms > wall_ms {
+            thread::sleep(Duration::from_millis(audio_ms - wall_ms));
         }
     }
+    active_count.fetch_sub(1, Ordering::Relaxed);
 }
 
-/// Push one chunk to every subscriber. Non-blocking: a full (slow) client skips
-/// this chunk; a client whose receiver dropped is pruned (swap_remove, O(1)).
-fn fan_out(shared: &Arc<Mutex<AudioShared>>, chunk: Arc<[u8]>) {
-    let Ok(mut g) = shared.lock() else {
-        return;
-    };
-    let mut i = 0;
-    while i < g.subscribers.len() {
-        match g.subscribers[i].1.try_send(Arc::clone(&chunk)) {
-            Ok(()) => i += 1,
-            Err(TrySendError::Full(_)) => i += 1,
-            Err(TrySendError::Disconnected(_)) => {
-                g.subscribers.swap_remove(i);
-            }
-        }
-    }
+/// One-shot audio decode: no `-re` (decode as fast as possible), no `-stream_loop`
+/// (no loop). Produces the entire file as 16 kHz mono S16LE on stdout.
+fn spawn_audio_ffmpeg_oneshot(path: &str) -> std::io::Result<Child> {
+    Command::new("ffmpeg")
+        .args([
+            "-loglevel", "error", "-nostdin",
+            "-i", path,
+            "-vn", "-map", "0:a:0",
+            "-f", "s16le", "-ar", "16000", "-ac", "1",
+            "pipe:1",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
 }
 
 fn fail<T>(slot_or_shared: &Arc<Mutex<T>>, msg: String)
@@ -456,11 +426,6 @@ trait ErrorSink {
     fn set_error(&mut self, msg: String);
 }
 impl ErrorSink for FrameSlot {
-    fn set_error(&mut self, msg: String) {
-        self.error = Some(msg);
-    }
-}
-impl ErrorSink for AudioShared {
     fn set_error(&mut self, msg: String) {
         self.error = Some(msg);
     }

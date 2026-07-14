@@ -41,6 +41,7 @@ use vrover_drivers::audio::AudioSource;
 use vrover_drivers::backends::media::{MediaAudioSource, MediaVideoSource};
 use vrover_drivers::backends::pipewire::{PipeWireAudioSource, PipeWireSource};
 use vrover_drivers::CaptureSource;
+use vrover_drivers::mock::MockCaptureSource;
 
 mod server;
 
@@ -57,16 +58,29 @@ fn main() {
 
     let (src, audio) = if let Some(file) = &args.mock {
         build_mock(file, &args)
+    } else if args.mock_audio.is_some() {
+        // `--mock-audio <file>` alone (no --mock): mock the AUDIO only, no video/portal. Lets us
+        // feed a pure-audio file (m4a/wav/mp3) as a simulated mic without a video track.
+        build_mock_audio_only(args.mock_audio.as_deref().unwrap())
     } else {
-        build_real()
+        build_real(args.audio_only)
     };
 
+    let mode = if args.mock_audio.is_some() && args.mock.is_none() {
+        " [MOCK-AUDIO]"
+    } else if args.audio_only {
+        " (audio-only)"
+    } else if args.mock.is_some() {
+        " [MOCK]"
+    } else {
+        ""
+    };
     let srv = server::HttpServer::new(src, audio);
     eprintln!(
         "[visual-scout] serving on http://{}:{}   (GET /health | /info | /frame | /audio{}; streams pause when idle)",
         args.host,
         args.port,
-        args.mock.as_deref().map(|_| " [MOCK]").unwrap_or("")
+        mode
     );
     eprintln!("[visual-scout] Ctrl+C to stop.");
 
@@ -76,9 +90,44 @@ fn main() {
     }
 }
 
+/// Mock AUDIO only (no video, no portal): feed a pure-audio file (m4a/wav/mp3) as a simulated mic.
+/// The screen is a stub solid frame (nobody reads /frame in this mode). Used to replay recordings
+/// for reproducible ASR testing without a real microphone.
+fn build_mock_audio_only(audio_path: &str) -> (Arc<Mutex<ScreenBox>>, Option<AudioArc>) {
+    eprintln!("[visual-scout] MOCK-AUDIO mode: decoding {audio_path} via ffmpeg (no video/portal)");
+    let src: Arc<Mutex<ScreenBox>> = Arc::new(Mutex::new(Box::new(
+        MockCaptureSource::solid(320, 240, 0, 0, 0),
+    )));
+    let audio = match MediaAudioSource::new(audio_path) {
+        Ok(a) => {
+            eprintln!("[visual-scout] mock audio ready ({audio_path})");
+            Some(Arc::new(a) as AudioArc)
+        }
+        Err(e) => {
+            eprintln!("[visual-scout] mock audio unavailable: {e}");
+            None
+        }
+    };
+    (src, audio)
+}
+
 /// Real PipeWire sources: ScreenCast portal (may prompt to pick a screen) + mic.
 /// Mic is best-effort: a missing/broken mic degrades to screen-only.
-fn build_real() -> (Arc<Mutex<ScreenBox>>, Option<AudioArc>) {
+fn build_real(audio_only: bool) -> (Arc<Mutex<ScreenBox>>, Option<AudioArc>) {
+    if audio_only {
+        eprintln!("[visual-scout] audio-only mode — skipping ScreenCast portal");
+        let audio = match PipeWireAudioSource::new() {
+            Ok(a) => {
+                eprintln!("[visual-scout] mic source ready (16 kHz mono S16LE requested)");
+                Some(Arc::new(a) as AudioArc)
+            }
+            Err(e) => {
+                eprintln!("[visual-scout] mic source unavailable: {e}");
+                std::process::exit(2);
+            }
+        };
+        return (Arc::new(Mutex::new(Box::new(vrover_drivers::mock::MockCaptureSource::solid(1, 1, 0, 0, 0)))), audio);
+    }
     eprintln!(
         "[visual-scout] negotiating PipeWire ScreenCast session (the portal may prompt to pick a screen)…"
     );
@@ -199,6 +248,7 @@ struct Args {
     mock_video: Option<String>,
     /// Override the mock audio file (defaults to `mock`).
     mock_audio: Option<String>,
+    audio_only: bool,
 }
 
 impl Args {
@@ -208,6 +258,7 @@ impl Args {
         let mut mock: Option<String> = None;
         let mut mock_video: Option<String> = None;
         let mut mock_audio: Option<String> = None;
+        let mut audio_only = false;
         let mut help = false;
         let mut it = std::env::args().skip(1).filter(|a| a.as_str() != "--");
         while let Some(a) = it.next() {
@@ -218,6 +269,7 @@ impl Args {
                 "--mock" => mock = it.next(),
                 "--mock-video" => mock_video = it.next(),
                 "--mock-audio" => mock_audio = it.next(),
+                "--audio-only" => audio_only = true,
                 _ => {}
             }
         }
@@ -229,7 +281,8 @@ impl Args {
                  \x20 --port <port>  Bind port (default $SCOUT_PORT or 7878)\n\
                  \x20 --mock <file>  Mock mode: decode <file> to frames + audio (no portal/mic)\n\
                  \x20 --mock-video <f> / --mock-audio <f>  Separate mock files per stream\n\
-                 \x20 -h, --help     Show this help"
+                 \x20 --audio-only        Only capture mic audio — skip the ScreenCast portal (zero GPU)\n\
+                 \x20 -h, --help          Show this help"
             );
             std::process::exit(0);
         }
@@ -248,6 +301,7 @@ impl Args {
             mock,
             mock_video,
             mock_audio,
+            audio_only,
         }
     }
 }
